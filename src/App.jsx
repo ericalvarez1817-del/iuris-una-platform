@@ -27,6 +27,7 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tracker" element={<Tracker />} />
+          <Route path="/agenda" element={<Agenda />} />
           
           {/* NUEVA RUTA ADMIN (Solo visible si entras a /admin) */}
           <Route path="/admin" element={<AdminPanel />} />
