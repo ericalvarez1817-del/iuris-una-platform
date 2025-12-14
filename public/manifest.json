@@ -1,16 +1,19 @@
 {
   "name": "IURIS UNA",
-  "short_name": "IURIS UNA",
-  "description": "Plataforma de servicios jurídicos para estudiantes.",
+  "short_name": "IURIS UNA App",
+  "description": "Plataforma de servicios jurídicos para estudiantes de la UNA. Acceso a documentos, consultas y material de estudio.",
   "start_url": "/",
   "display": "standalone",
+  "id": "/", 
+  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "icons": [
     {
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
