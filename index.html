@@ -6,16 +6,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
     <link rel="manifest" href="/manifest.json" />
-    
     <meta name="theme-color" content="#4f46e5" />
-    
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="IURIS UNA App" />
     
+    <style>
+      /* Estilo base para cubrir todo el fondo ANTES de que cargue React */
+      body {
+        margin: 0;
+        /* Define un color de fondo oscuro para evitar el parpadeo blanco inicial */
+        background-color: #111827; /* Gris oscuro, similar al tema dark */
+        transition: background-color 0.3s;
+      }
+      /* Oculta temporalmente la aplicación. Esto previene que se vea sin estilos */
+      #root {
+          opacity: 0;
+          transition: opacity 0.5s ease-in-out;
+      }
+    </style>
     <title>iuris-una</title>
   </head>
   <body>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const rootElement = document.getElementById('root');
+            // Muestra el contenido de la aplicación suavemente
+            if (rootElement) {
+                rootElement.style.opacity = '1';
+            }
+        });
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
