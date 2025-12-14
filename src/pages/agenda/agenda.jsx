@@ -12,7 +12,6 @@ export default function Agenda() {
     const [tareas, setTareas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    // const <--- LÍNEA CORREGIDA: Eliminada la declaración incompleta.
     // Estado para la nueva tarea
     const [nuevaTarea, setNuevaTarea] = useState({ titulo: '', descripcion: '', fecha_limite: '' });
 
@@ -27,16 +26,17 @@ export default function Agenda() {
     const fetchTareas = async () => {
         setLoading(true);
         setError(null);
-        // Traemos todas las tareas del usuario, ordenadas por la fecha más cercana
+        
+        // Traemos todas las tareas del usuario, ordenadas por la fecha y estado
         const { data, error } = await supabase
             .from('tareas_agenda')
             .select('*')
             .order('fecha_limite', { ascending: true })
-            .order('completada', { ascending: true }); // Muestra las pendientes primero
+            .order('completada', { ascending: true }); 
 
         if (error) {
             console.error('Error fetching tasks:', error);
-            setError('No se pudieron cargar los datos de la agenda.');
+            setError('No se pudieron cargar los datos. Verifique su conexión y RLS.');
         } else {
             setTareas(data);
         }
@@ -55,40 +55,52 @@ export default function Agenda() {
             return;
         }
 
+        // --- CORRECCIÓN 1: AJUSTE DE FECHA (PARA EVITAR -1 DÍA) ---
+        // Forzamos la fecha a mediodía (12:00 UTC) para que al convertir a ISOString y guardarse en DB, 
+        // no retroceda al día anterior en zonas horarias negativas (como Paraguay, GMT-3).
+        const dateString = nuevaTarea.fecha_limite;
+        const dateObject = new Date(dateString);
+        dateObject.setUTCHours(12, 0, 0, 0); // Ajustamos a las 12:00:00 UTC
+        
         const taskData = {
-            ...nuevaTarea,
-            user_id: user.id, // RLS requiere el user_id
+            titulo: nuevaTarea.titulo,
+            descripcion: nuevaTarea.descripcion,
+            fecha_limite: dateObject.toISOString(), // Usamos la fecha ajustada
+            user_id: user.id,
             completada: false,
         };
 
-        const { error } = await supabase
+        const { error: insertError } = await supabase
             .from('tareas_agenda')
-            .insert([taskData]);
+            .insert([taskData])
+            .select(); // Ejecutamos la inserción
 
-        if (error) {
-            console.error('Error adding task:', error);
-            setError('Error al guardar la nueva tarea.');
+        if (insertError) {
+            console.error('Error adding task:', insertError);
+            setError(`Error al guardar: ${insertError.message}. REVISAR RLS de INSERT.`);
         } else {
             setNuevaTarea({ titulo: '', descripcion: '', fecha_limite: '' }); // Limpiar el formulario
-            fetchTareas(); // Recargar la lista
+            fetchTareas(); // Recargar la lista después del éxito
         }
+
+        setLoading(false);
     };
 
     const toggleCompletada = async (id, currentState) => {
-        // Optimistic update: actualiza la UI antes de la respuesta del servidor
+        // Optimistic update
         setTareas(tareas.map(t => 
             t.id === id ? { ...t, completada: !currentState } : t
         ));
 
-        const { error } = await supabase
+        const { error: updateError } = await supabase
             .from('tareas_agenda')
             .update({ completada: !currentState })
             .eq('id', id);
 
-        if (error) {
-            // Si falla, revertir el cambio
-            console.error('Error updating task:', error);
-            fetchTareas(); 
+        if (updateError) {
+            console.error('Error updating task:', updateError);
+            setError(`Error al actualizar: ${updateError.message}. REVISAR RLS de UPDATE.`);
+            fetchTareas(); // Revertir y recargar si falla
         }
     };
 
@@ -96,16 +108,21 @@ export default function Agenda() {
         const confirmDelete = window.confirm("¿Estás seguro de que quieres eliminar esta tarea?");
         if (!confirmDelete) return;
 
-        setTareas(tareas.filter(t => t.id !== id)); // Optimistic delete
+        // Optimistic delete
+        setTareas(tareas.filter(t => t.id !== id)); 
+        const tareaOriginal = tareas.find(t => t.id === id);
 
-        const { error } = await supabase
+        // --- CORRECCIÓN 2: MANEJO DEL ERROR EN DELETE ---
+        const { error: deleteError } = await supabase
             .from('tareas_agenda')
             .delete()
             .eq('id', id);
 
-        if (error) {
-            console.error('Error deleting task:', error);
-            fetchTareas(); // Recargar si falla
+        if (deleteError) {
+            console.error('Error deleting task:', deleteError);
+            setError(`Error al eliminar: ${deleteError.message}. REVISAR RLS de DELETE.`);
+            // Revertir el cambio si falla la eliminación (problema del RLS)
+            setTareas([...tareas, tareaOriginal].sort((a, b) => new Date(a.fecha_limite) - new Date(b.fecha_limite))); 
         }
     };
 
@@ -116,6 +133,7 @@ export default function Agenda() {
 
     const formatDate = (dateString) => {
         if (!dateString) return 'Sin fecha';
+        // La visualización es correcta con el objeto Date
         const date = new Date(dateString);
         return date.toLocaleDateString('es-ES', { 
             weekday: 'long', 
@@ -147,7 +165,7 @@ export default function Agenda() {
             {/* MENSAJES DE ESTADO */}
             {error && (
                 <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-600 text-sm font-bold flex items-center gap-2 mb-4">
-                    <AlertCircle size={20} /> {error}
+                    <AlertCircle size={20} /> **Error:** {error}
                 </div>
             )}
 
