@@ -5,6 +5,9 @@ import AppLayout from './components/layout/AppLayout'
 import Login from './pages/auth/Login'
 import Dashboard from './pages/dashboard/Dashboard'
 import Tracker from './pages/tracker/Tracker'
+// Importación corregida y añadida para el componente Agenda
+import Agenda from './pages/agenda/agenda' // <-- ¡CORRECCIÓN CLAVE!
+
 import Calculator from './pages/tools/Calculator'
 import GpaCalculator from './pages/tools/GpaCalculator'
 import NoteGenerator from './pages/tools/NoteGenerator'
@@ -27,7 +30,7 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tracker" element={<Tracker />} />
-          <Route path="/agenda" element={<Agenda />} />
+          <Route path="/agenda" element={<Agenda />} /> {/* Ya no dará error */}
           
           {/* NUEVA RUTA ADMIN (Solo visible si entras a /admin) */}
           <Route path="/admin" element={<AdminPanel />} />
