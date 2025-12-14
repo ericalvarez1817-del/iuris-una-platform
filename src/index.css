@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos base para el modo claro y oscuro */
+html {
+  /* Esto hace que el cambio de color tarde 300ms, muy elegante */
+  transition: background-color 0.3s, color 0.3s;
+}
+
+html, body {
+  height: 100%;
+  /* Colores por defecto (Modo Claro) */
+  background-color: #f8fafc; /* slate-50 */
+  color: #0f172a; /* slate-900 */
+}
+
+/* Colores para el Modo Oscuro (Cuando la etiqueta html tiene la clase 'dark') */
+html.dark body {
+  background-color: #0f172a; /* slate-900 (Fondo oscuro profundo) */
+  color: #f1f5f9; /* slate-100 (Texto claro) */
+}
