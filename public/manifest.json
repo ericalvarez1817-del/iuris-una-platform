@@ -4,7 +4,7 @@
   "description": "Plataforma de servicios jurídicos para estudiantes de la UNA. Acceso a documentos, consultas y material de estudio.",
   "start_url": "/",
   "display": "standalone",
-  "id": "/", 
+  "id": "/",
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
