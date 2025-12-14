@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import useTheme from '../../hooks/useTheme'
+// Importamos los iconos
 import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag } from 'lucide-react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 
@@ -11,10 +12,20 @@ export default function Dashboard() {
   
   const [userEmail, setUserEmail] = useState('')
   const [average, setAverage] = useState('0.00')
+  
+  // --- ESTADOS NUEVOS PARA LA AGENDA ---
+  const [proximaTarea, setProximaTarea] = useState(null)
+  const [loadingAgenda, setLoadingAgenda] = useState(true)
+  const [progresoData, setProgresoData] = useState('Cargando...') 
+  // ------------------------------------
 
   useEffect(() => {
     getUser()
     getAverage()
+    // --- LLAMADA A LAS NUEVAS FUNCIONES AL CARGAR EL DASHBOARD ---
+    fetchProximaTarea()
+    fetchProgresoData() // <-- Ahora llama a la función corregida
+    // -----------------------------------------------------------
   }, [location])
 
   const getUser = async () => {
@@ -50,10 +61,93 @@ export default function Dashboard() {
     navigate('/')
   }
 
+  // --- FUNCIÓN: CARGA EL PRÓXIMO EVENTO DE LA AGENDA (SIN CAMBIOS) ---
+  const fetchProximaTarea = async () => {
+    setLoadingAgenda(true)
+    const { data, error } = await supabase
+      .from('tareas_agenda')
+      .select('titulo, descripcion, fecha_limite')
+      .eq('completada', false)
+      .order('fecha_limite', { ascending: true })
+      .limit(1)
+
+    if (error) {
+      console.error('Error al cargar la agenda:', error)
+      setProximaTarea(null)
+    } else if (data && data.length > 0) {
+      const fecha = new Date(data[0].fecha_limite).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+      setProximaTarea({
+        ...data[0],
+        fecha_formateada: fecha.replace('.', '')
+      })
+    } else {
+      setProximaTarea({
+        titulo: 'Sin Eventos Próximos',
+        descripcion: '¡Añade tu primer parcial!',
+        fecha_formateada: ''
+      })
+    }
+    setLoadingAgenda(false)
+  }
+  
+  // --- FUNCIÓN REAL CORREGIDA: CARGA DATOS DEL TRACKER DE PROGRESO ---
+  // Usa la tabla 'student_progress' y la lógica de bolillas.
+  const fetchProgresoData = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+        setProgresoData('Inicia sesión para ver tu progreso')
+        return
+    }
+
+    const { data: trackerEntries, error } = await supabase
+        .from('student_progress') // <-- Usando el nombre de tabla CORREGIDO
+        .select('subject_id, bolilla_number')
+        .eq('user_id', user.id)
+
+    if (error) {
+        console.error('Error al cargar el progreso:', error)
+        setProgresoData('Error al cargar datos.')
+        return
+    }
+
+    if (trackerEntries && trackerEntries.length > 0) {
+        // 1. Agrupar por materia y encontrar la bolilla más avanzada
+        const progressBySubject = trackerEntries.reduce((acc, entry) => {
+            const currentMax = acc[entry.subject_id] || 0;
+            acc[entry.subject_id] = Math.max(currentMax, entry.bolilla_number);
+            return acc;
+        }, {});
+
+        const numMaterias = Object.keys(progressBySubject).length;
+        
+        // 2. Determinar la bolilla más alta registrada en general
+        let maxBolilla = 0;
+        let mostAdvancedSubject = 'N/A'; // Nombre de la materia con el progreso más alto
+
+        for (const [subject, bolilla] of Object.entries(progressBySubject)) {
+            if (bolilla > maxBolilla) {
+                maxBolilla = bolilla;
+                mostAdvancedSubject = subject;
+            }
+        }
+
+        // Si hay una materia más avanzada, mostrar el resumen detallado
+        if (numMaterias > 0) {
+            setProgresoData(`Avanzando en ${numMaterias} materias. Última bolilla: ${maxBolilla} (${mostAdvancedSubject})`);
+        } else {
+            setProgresoData('Comienza a registrar tu avance.');
+        }
+
+    } else {
+        setProgresoData('Comienza a registrar tu avance.');
+    }
+  }
+
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 pb-24 transition-colors duration-300">
       
-      {/* HEADER */}
+      {/* HEADER (SIN CAMBIOS) */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Hola, Colega</h1>
@@ -79,7 +173,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* TARJETA PROMEDIO */}
+      {/* TARJETA PROMEDIO (SIN CAMBIOS) */}
       <Link to="/gpa" className="block transform transition hover:scale-[1.02] active:scale-95 mb-6">
         <div className="bg-slate-900 dark:bg-slate-800 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden cursor-pointer border border-transparent dark:border-slate-700">
           <div className="relative z-10">
@@ -104,10 +198,10 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* SECCIÓN HERRAMIENTAS */}
+      {/* SECCIÓN HERRAMIENTAS (SIN CAMBIOS) */}
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Herramientas</h3>
 
-      {/* 1. MERCADO UNA (NUEVO - DESTACADO) */}
+      {/* 1. MERCADO UNA (SIN CAMBIOS) */}
       <Link to="/market" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-indigo-400 group relative overflow-hidden">
           {/* Efecto de brillo al pasar el mouse */}
@@ -123,7 +217,7 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* 2. LÉXICO DE PODER */}
+      {/* 2. LÉXICO DE PODER (SIN CAMBIOS) */}
       <Link to="/lexicon" className="block mb-6">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-amber-400 group">
           <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-lg text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
@@ -140,27 +234,48 @@ export default function Dashboard() {
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Tu Agenda</h3>
       
       <div className="space-y-3">
-        {/* Card 1 */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors">
-          <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-blue-600 dark:text-blue-400">
-            <CalendarCheck size={24} />
-          </div>
-          <div>
-            <h4 className="font-bold text-slate-800 dark:text-slate-100">Próximo Parcial</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Derecho Romano - 15 Oct</p>
-          </div>
-        </div>
+        {/* Card 1: PRÓXIMO PARCIAL (Conectado a tareas_agenda) */}
+        <Link to="/agenda" className="block">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-blue-400">
+            {loadingAgenda ? (
+                // Estado de carga
+                <div className="flex items-center gap-4">
+                    <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-blue-600 dark:text-blue-400 animate-pulse">
+                        <CalendarCheck size={24} />
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Cargando próximos eventos...</p>
+                </div>
+            ) : (
+                // Datos reales o placeholder
+                <>
+                    <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-blue-600 dark:text-blue-400">
+                        <CalendarCheck size={24} />
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100">{proximaTarea.titulo}</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {proximaTarea.descripcion} {proximaTarea.fecha_formateada && `- ${proximaTarea.fecha_formateada}`}
+                        </p>
+                    </div>
+                </>
+            )}
+            </div>
+        </Link>
 
-        {/* Card 2 */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors">
-          <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg text-emerald-600 dark:text-emerald-400">
-            <TrendingUp size={24} />
-          </div>
-          <div>
-            <h4 className="font-bold text-slate-800 dark:text-slate-100">Progreso de Estudio</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Consulta tu Tracker</p>
-          </div>
-        </div>
+
+        {/* Card 2: PROGRESO DE ESTUDIO (Conectado a student_progress) */}
+        <Link to="/tracker" className="block">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-emerald-400">
+                <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg text-emerald-600 dark:text-emerald-400">
+                    <TrendingUp size={24} />
+                </div>
+                <div>
+                    <h4 className="font-bold text-slate-800 dark:text-slate-100">Progreso de Estudio</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{progresoData}</p>
+                </div>
+            </div>
+        </Link>
+        
       </div>
     </div>
   )
