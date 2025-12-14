@@ -55,12 +55,14 @@ export default function Agenda() {
             return;
         }
 
-        // --- CORRECCIÓN 1: AJUSTE DE FECHA (PARA EVITAR -1 DÍA) ---
-        // Forzamos la fecha a mediodía (12:00 UTC) para que al convertir a ISOString y guardarse en DB, 
-        // no retroceda al día anterior en zonas horarias negativas (como Paraguay, GMT-3).
+        // --- CORRECCIÓN FINAL DE FECHA: AÑADIR UN DÍA ---
+        // Se crea el objeto Date, y luego se añade +1 día (86400000 ms) al timestamp.
+        // Esto compensa el retraso de medianoche de UTC y asegura el día correcto.
         const dateString = nuevaTarea.fecha_limite;
         const dateObject = new Date(dateString);
-        dateObject.setUTCHours(12, 0, 0, 0); // Ajustamos a las 12:00:00 UTC
+        
+        // Añadir explícitamente un día (24 * 60 * 60 * 1000 milisegundos)
+        dateObject.setTime(dateObject.getTime() + (24 * 60 * 60 * 1000));
         
         const taskData = {
             titulo: nuevaTarea.titulo,
@@ -112,7 +114,7 @@ export default function Agenda() {
         setTareas(tareas.filter(t => t.id !== id)); 
         const tareaOriginal = tareas.find(t => t.id === id);
 
-        // --- CORRECCIÓN 2: MANEJO DEL ERROR EN DELETE ---
+        // MANEJO DEL ERROR EN DELETE (Ya revisado y robusto)
         const { error: deleteError } = await supabase
             .from('tareas_agenda')
             .delete()
@@ -121,7 +123,7 @@ export default function Agenda() {
         if (deleteError) {
             console.error('Error deleting task:', deleteError);
             setError(`Error al eliminar: ${deleteError.message}. REVISAR RLS de DELETE.`);
-            // Revertir el cambio si falla la eliminación (problema del RLS)
+            // Revertir el cambio si falla la eliminación
             setTareas([...tareas, tareaOriginal].sort((a, b) => new Date(a.fecha_limite) - new Date(b.fecha_limite))); 
         }
     };
@@ -133,7 +135,7 @@ export default function Agenda() {
 
     const formatDate = (dateString) => {
         if (!dateString) return 'Sin fecha';
-        // La visualización es correcta con el objeto Date
+        // La visualización lee correctamente el string ISO de la DB
         const date = new Date(dateString);
         return date.toLocaleDateString('es-ES', { 
             weekday: 'long', 
