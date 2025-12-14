@@ -1,6 +1,6 @@
 {
   "name": "IURIS UNA",
-  "short_name": "IURIS UNA App",
+  "short_name": "IURIS UNA",
   "description": "Plataforma de servicios jurídicos para estudiantes.",
   "start_url": "/",
   "display": "standalone",
