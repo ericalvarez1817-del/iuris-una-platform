@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-// CORRECCIÓN: Quitamos 'Image as ImageIcon' y usamos 'Camera' que es seguro
+// CORRECCIÓN: Quitamos 'Image' y 'ImageIcon' para evitar conflictos. Usamos 'Camera'.
 import { 
   Book, Search, Plus, Download, ShoppingCart, 
-  Loader2, DollarSign, FileText, Camera, X, ArrowLeft, Wallet 
+  Loader2, DollarSign, FileText, Camera, X, ArrowLeft, Wallet, Upload
 } from 'lucide-react'
 
 // Utilidad moneda
@@ -77,7 +77,10 @@ export default function Library() {
           }
 
           // 2. Subir Archivo (Privado)
-          const fileName = `book_${Date.now()}_${form.file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
+          // Limpiamos el nombre del archivo para evitar errores de caracteres especiales
+          const safeFileName = form.file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+          const fileName = `book_${Date.now()}_${safeFileName}`
+          
           const { error: fileErr } = await supabase.storage.from('ebook-files').upload(fileName, form.file)
           if (fileErr) throw fileErr
 
@@ -243,12 +246,14 @@ export default function Library() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
+                        {/* INPUT PARA PORTADA */}
                         <label className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                             <Camera className="mx-auto mb-2 text-slate-400"/>
                             <span className="text-[10px] font-bold block text-slate-500">{form.cover ? "Portada Lista" : "Subir Portada"}</span>
                             <input type="file" accept="image/*" className="hidden" onChange={e => setForm({...form, cover: e.target.files[0]})}/>
                         </label>
 
+                        {/* INPUT PARA ARCHIVO */}
                         <label className="border-2 border-dashed border-indigo-200 dark:border-indigo-900/50 bg-indigo-50 dark:bg-indigo-900/10 rounded-2xl p-4 text-center cursor-pointer hover:bg-indigo-100 transition">
                             <FileText className="mx-auto mb-2 text-indigo-500"/>
                             <span className="text-[10px] font-bold block text-indigo-600">{form.file ? "Archivo Listo" : "Subir PDF/DOC"}</span>
