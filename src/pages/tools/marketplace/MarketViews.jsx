@@ -1,11 +1,21 @@
 import { 
   Search, Plus, CheckCircle2, Trash2, FileText, 
-  Paperclip, Briefcase, User, Landmark, ShieldCheck, 
+  Paperclip, Briefcase, Landmark, ShieldCheck, 
   Star, Download, Camera, Loader2, Clock, ArrowUpRight, ArrowDownLeft, Copy, CreditCard,
-  Briefcase as BriefcaseIcon, Hammer
+  Briefcase as BriefcaseIcon, Hammer, Upload, AlertTriangle
 } from 'lucide-react'
 
-// DATOS BANCARIOS ADMIN (Información Real)
+// --- UTILIDADES ---
+const formatMoney = (amount) => {
+    return new Intl.NumberFormat('es-PY').format(amount || 0)
+}
+
+const formatDate = (dateString) => {
+    if (!dateString) return ''
+    return new Date(dateString).toLocaleDateString('es-PY')
+}
+
+// DATOS BANCARIOS ADMIN
 const ADMIN_BANK_INFO = {
     banco: "Banco Atlas",
     cuenta: "1749426",
@@ -13,7 +23,8 @@ const ADMIN_BANK_INFO = {
     ci: "5.948.371"
 }
 
-// COMPONENTE DE ESTADO VACÍO
+// --- COMPONENTES AUXILIARES ---
+
 const EmptyState = ({ icon: Icon, title, description }) => (
     <div className="text-center py-20 px-6 rounded-3xl bg-slate-50 dark:bg-slate-900/50 border-2 border-dashed border-slate-200 dark:border-slate-800 animate-fade-in">
         <div className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-500 dark:text-indigo-400 w-20 h-20 rounded-[2rem] rotate-3 flex items-center justify-center mx-auto mb-6 shadow-sm transition hover:rotate-6 hover:scale-105">
@@ -26,7 +37,6 @@ const EmptyState = ({ icon: Icon, title, description }) => (
     </div>
 )
 
-// ESTRELLAS
 const StarRating = ({ rating, size = 12 }) => (
   <div className="flex text-amber-400">
     {[...Array(5)].map((_, i) => (
@@ -37,7 +47,12 @@ const StarRating = ({ rating, size = 12 }) => (
 
 // --- TARJETA DE ITEM DE MERCADO ---
 function MarketItemCard({ item, currentUserId, onDelete, onRequestClick, section }) {
-    const isService = section === 'servicios' // Si es servicio, yo contrato. Si es trabajo, me postulo.
+    const isService = section === 'servicios' 
+
+    // Protección de datos nulos
+    const ownerName = item.profiles?.full_name || item.profiles?.email?.split('@')[0] || 'Usuario'
+    const ownerReputation = item.profiles?.reputation || 5
+    const ownerAvatar = item.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${ownerName}&background=random`
 
     return (
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm relative mb-6 transition hover:shadow-md group">
@@ -50,15 +65,15 @@ function MarketItemCard({ item, currentUserId, onDelete, onRequestClick, section
              
              {/* HEADER USUARIO */}
              <div className="flex items-center gap-4 mb-5">
-               <img src={item.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${item.profiles?.email}&background=random`} alt="Avatar" className="w-12 h-12 rounded-2xl object-cover shadow-sm" />
+               <img src={ownerAvatar} alt="Avatar" className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-slate-100" />
                <div>
                   <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{item.profiles?.full_name || item.profiles?.email?.split('@')[0]}</p>
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{ownerName}</p>
                     {item.profiles?.is_verified && <CheckCircle2 size={14} className="text-blue-500 fill-blue-500 text-white" />}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                      <StarRating rating={item.profiles?.reputation || 5} />
-                      <span className="text-[10px] text-slate-400 font-bold">({item.profiles?.reputation} rep)</span>
+                      <StarRating rating={ownerReputation} />
+                      <span className="text-[10px] text-slate-400 font-bold">({ownerReputation} rep)</span>
                   </div>
                </div>
             </div>
@@ -86,7 +101,7 @@ function MarketItemCard({ item, currentUserId, onDelete, onRequestClick, section
               <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Presupuesto</span>
                   <div className="font-black text-2xl text-emerald-600 dark:text-emerald-400 flex items-baseline gap-1">
-                      {item.price} <span className="text-xs text-slate-400 font-bold">IURIS</span>
+                      {formatMoney(item.price)} <span className="text-xs text-slate-400 font-bold">IURIS</span>
                   </div>
               </div>
               
@@ -147,11 +162,11 @@ export function FeedView({ items = [], section, setSection, onPublishClick, onRe
   )
 }
 
-// --- VISTA 2: BUZÓN (INBOX - LÓGICA COMPLEJA) ---
-export function InboxView({ requests = [], currentUserId, onAccept, onReject, onComplete }) {
+// --- VISTA 2: BUZÓN (INBOX - CORREGIDO) ---
+export function InboxView({ requests = [], currentUserId, onAccept, onReject, onComplete, onDeliver }) {
   return (
     <div className="space-y-6 animate-fade-in pb-24">
-      <h2 className="font-black text-slate-800 dark:text-white mb-6 text-2xl px-2">Actividad Reciente</h2>
+      <h2 className="font-black text-slate-800 dark:text-white mb-6 text-2xl px-2">Gestión de Contratos</h2>
       
       {!requests || requests.length === 0 ? (
           <EmptyState 
@@ -161,120 +176,176 @@ export function InboxView({ requests = [], currentUserId, onAccept, onReject, on
           />
       ) : (
           requests.map(req => {
-            const isIncoming = req.to_id === currentUserId; // Me llegó a mí (Soy el dueño de la publicación)
+            const isIncoming = req.to_id === currentUserId; 
             const partner = isIncoming ? req.from_profile : req.to_profile;
             
-            // LÓGICA DE TIPO DE ITEM
-            const itemSection = req.item_data?.section; // 'servicios' o 'trabajos'
+            // Protección contra items borrados
+            const itemSection = req.item_data?.section;
+            const itemTitle = req.item_data?.title || 'Publicación eliminada';
             const isService = itemSection === 'servicios';
             
+            const partnerName = partner?.full_name || partner?.email?.split('@')[0] || 'Usuario';
+            const partnerAvatar = partner?.avatar_url || `https://ui-avatars.com/api/?name=${partnerName}&background=random`;
+
+            // Roles
+            const amIClient = (isService && !isIncoming) || (!isService && isIncoming);
+            const amIWorker = (isService && isIncoming) || (!isService && !isIncoming);
+            
             // --- ETIQUETAS INTELIGENTES ---
-            let statusLabel = '';
-            let statusColor = '';
+            let statusLabel = 'PENDIENTE';
+            let statusColor = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
 
             if (req.status === 'completed') {
                 statusLabel = 'FINALIZADO';
                 statusColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
             } else if (req.status === 'rejected') {
-                statusLabel = 'RECHAZADO';
+                statusLabel = 'CANCELADO';
                 statusColor = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+            } else if (req.status === 'delivered') {
+                statusLabel = 'ENTREGADO (REVISIÓN)';
+                statusColor = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
             } else if (req.status === 'accepted') {
                 statusLabel = 'EN PROCESO';
-                statusColor = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
-            } else {
-                // Estados pendientes
-                if (isService) {
-                    // Servicio: Alguien contrata al dueño
-                    statusLabel = isIncoming ? 'TE CONTRATARON (PAGADO)' : 'ESPERANDO ACEPTACIÓN';
-                    statusColor = isIncoming ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
-                } else {
-                    // Trabajo: Alguien se postula ante el dueño
-                    statusLabel = isIncoming ? 'NUEVO CANDIDATO' : 'TE POSTULASTE';
-                    statusColor = isIncoming ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
-                }
+                statusColor = 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400';
             }
 
-            // --- LÓGICA DE BOTÓN "COMPLETAR" ---
-            // Solo debe ver el botón "Completar" quien PAGÓ.
-            // En Servicios: Paga el Cliente (Outgoing/Sender).
-            // En Trabajos: Paga el Dueño (Incoming/Receiver).
-            const showCompleteButton = req.status === 'accepted' && (
-                (isService && !isIncoming) || (!isService && isIncoming)
-            );
+            // Barra lateral de color
+            const barBaseColor = statusColor.split(' ')[0];
 
             return (
               <div key={req.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm mb-4 overflow-hidden relative group">
                   {/* Barra lateral de estado */}
-                  <div className={`absolute top-0 left-0 w-1.5 h-full transition-colors ${req.status === 'completed' ? 'bg-green-500' : req.status === 'rejected' ? 'bg-red-500' : 'bg-indigo-500'}`}></div>
+                  <div className={`absolute top-0 left-0 w-1.5 h-full ${barBaseColor}`}></div>
                   
+                  {/* CONTENEDOR INTERNO - INICIO */}
                   <div className="pl-4">
                     <div className="flex justify-between mb-4 items-center">
                             <span className={`text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest ${statusColor}`}>
                                 {statusLabel}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> {new Date(req.created_at).toLocaleDateString()}</span>
+                            <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(req.created_at)}</span>
                     </div>
                     
-                    <h3 className="font-black text-lg text-slate-800 dark:text-white mb-1 leading-tight">{req.item_data?.title}</h3>
+                    <h3 className="font-black text-lg text-slate-800 dark:text-white mb-1 leading-tight">{itemTitle}</h3>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-                        Monto bloqueado: <span className="text-emerald-500">{req.price_locked} IURIS</span>
+                        Monto custodiado: <span className="text-emerald-500">{formatMoney(req.price_locked)} IURIS</span>
                     </p>
                     
                     <div className="flex items-center gap-3 mb-5 bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                        <img src={partner?.avatar_url || `https://ui-avatars.com/api/?name=${partner?.email}&background=random`} alt="Partner" className="w-10 h-10 rounded-full object-cover" />
+                        <img src={partnerAvatar} alt="Partner" className="w-10 h-10 rounded-full object-cover bg-slate-200" />
                         <div>
                             <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">
-                                {isIncoming ? 'Usuario Remitente:' : 'Usuario Destino:'}
+                                {amIClient ? 'Trabajador:' : 'Cliente:'}
                             </p>
                             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                {partner?.full_name || partner?.email?.split('@')[0]}
+                                {partnerName}
                             </p>
                         </div>
                     </div>
                     
+                    {/* NOTA INICIAL / REQUISITOS */}
                     <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl mb-5 border border-slate-100 dark:border-slate-700/50 relative">
                         <div className="text-slate-300 absolute top-2 left-2 opacity-50"><FileText size={20}/></div>
-                        <p className="text-sm italic text-slate-600 dark:text-slate-300 pl-8 relative z-10 leading-relaxed">"{req.note}"</p>
+                        <p className="text-sm italic text-slate-600 dark:text-slate-300 pl-8 relative z-10 leading-relaxed break-words">"{req.note}"</p>
                         
                         {req.file_url && (
                             <a href={req.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-xs font-bold bg-white dark:bg-slate-700 p-3 rounded-xl border border-slate-200 dark:border-slate-600 hover:opacity-80 transition mt-4 shadow-sm w-fit">
-                                <Paperclip size={16} /> Ver Adjunto
+                                <Paperclip size={16} /> Ver Requisitos
                             </a>
                         )}
                     </div>
 
-                    {/* --- ZONA DE ACCIONES --- */}
-                    
-                    {/* Solo el receptor puede aceptar/rechazar cuando está pendiente/postulación */}
-                    {isIncoming && (req.status === 'pending' || req.status === 'postulation') && (
-                        <div className="flex flex-col gap-2 animate-in slide-in-from-bottom-2">
-                            {/* Mensaje de advertencia si soy el que tiene que pagar al aceptar (Dueño de Trabajo) */}
-                            {!isService && <p className="text-xs text-center text-slate-500 mb-1">⚠️ Al aceptar, descontaremos el saldo de tu billetera.</p>}
-                            
-                            <div className="flex gap-3">
-                                <button onClick={() => onReject(req.id)} className="flex-1 py-3.5 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 text-xs font-black rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition border border-red-100 dark:border-red-900/50">
-                                    RECHAZAR
-                                </button>
-                                <button onClick={() => onAccept(req)} className="flex-1 py-3.5 bg-emerald-600 text-white text-xs font-black rounded-2xl shadow-lg shadow-emerald-200 dark:shadow-none hover:bg-emerald-700 transition tracking-wider">
-                                    {isService ? 'ACEPTAR TRABAJO' : 'CONTRATAR (PAGAR)'}
-                                </button>
+                    {/* --- ZONA DE ENTREGA (VISUAL) --- */}
+                    {req.status === 'delivered' && (
+                        <div className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-2xl mb-5 border border-emerald-100 dark:border-emerald-800/50 animate-in zoom-in-95">
+                            <div className="flex items-center gap-2 mb-2">
+                                <CheckCircle2 size={18} className="text-emerald-500"/>
+                                <p className="text-xs font-black uppercase text-emerald-600 dark:text-emerald-400">Trabajo Entregado</p>
                             </div>
+                            <p className="text-sm text-slate-600 dark:text-slate-300 mb-3 break-words">"{req.delivery_note}"</p>
+                            
+                            {req.delivery_file_url ? (
+                                <a href={req.delivery_file_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 text-xs font-bold py-3 rounded-xl border border-emerald-200 dark:border-emerald-700 shadow-sm hover:scale-[1.02] transition">
+                                    <Download size={16} /> DESCARGAR ENTREGABLE
+                                </a>
+                            ) : (
+                                <p className="text-xs text-red-400 italic font-bold bg-red-50 p-2 rounded-lg inline-block">Error: No se adjuntó archivo.</p>
+                            )}
                         </div>
                     )}
 
-                    {/* Botón de Completar (Liberar Fondos) */}
-                    {showCompleteButton && (
-                        <button onClick={() => onComplete(req)} className="w-full py-4 bg-blue-600 text-white text-xs font-black rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition tracking-wider flex items-center justify-center gap-2 animate-pulse">
-                            <CheckCircle2 size={18}/> CONFIRMAR RECEPCIÓN & LIBERAR FONDOS
-                        </button>
-                    )}
+                    {/* --- ZONA DE ACCIONES (DINÁMICA) --- */}
+                    <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        
+                        {/* 1. NEGOCIACIÓN (Solo receptor) */}
+                        {isIncoming && (req.status === 'pending' || req.status === 'postulation') && (
+                            <div className="flex flex-col gap-2">
+                                {!isService && (
+                                    <p className="text-xs text-center text-slate-500 mb-1 flex items-center justify-center gap-1">
+                                        <AlertTriangle size={12}/> Al aceptar, se bloquearán los fondos de tu billetera.
+                                    </p>
+                                )}
+                                <div className="flex gap-3">
+                                    <button onClick={() => onReject(req.id)} className="flex-1 py-3.5 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 text-xs font-black rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition border border-red-100 dark:border-red-900/50">
+                                        RECHAZAR
+                                    </button>
+                                    <button onClick={() => onAccept(req)} className="flex-1 py-3.5 bg-emerald-600 text-white text-xs font-black rounded-2xl shadow-lg shadow-emerald-200 dark:shadow-none hover:bg-emerald-700 transition tracking-wider">
+                                        {isService ? 'ACEPTAR TRABAJO' : 'CONTRATAR (PAGAR)'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
-                    {req.status === 'completed' && (
-                        <p className="text-center text-xs text-green-600 dark:text-green-400 font-black uppercase flex items-center justify-center gap-2 bg-green-50 dark:bg-green-900/20 py-3 rounded-2xl border border-green-200 dark:border-green-800">
-                            <CheckCircle2 size={16} className="fill-green-600 text-white dark:text-slate-900"/> Transacción Finalizada
-                        </p>
-                    )}
-                  </div>
+                        {/* 2. TRABAJADOR: ENTREGAR */}
+                        {amIWorker && req.status === 'accepted' && (
+                            <button onClick={() => onDeliver(req)} className="w-full py-4 bg-indigo-600 text-white text-xs font-black rounded-2xl shadow-lg shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition tracking-wider flex items-center justify-center gap-2 animate-pulse">
+                                <Upload size={18}/> ENTREGAR TRABAJO FINAL
+                            </button>
+                        )}
+
+                        {/* 3. CLIENTE: ESPERANDO */}
+                        {amIClient && req.status === 'accepted' && (
+                             <p className="text-center text-xs text-slate-400 font-bold py-2 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                                <Loader2 size={12} className="inline animate-spin mr-2"/>
+                                Esperando entrega del trabajador...
+                            </p>
+                        )}
+
+                        {/* 4. CLIENTE: REVISIÓN Y PAGO */}
+                        {amIClient && req.status === 'delivered' && (
+                             <div className="space-y-2 mt-2">
+                                <p className="text-xs text-center text-slate-500">Revisa el archivo. Si todo está correcto, libera el pago.</p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => alert("Función de reclamo en desarrollo. Contacta a soporte.")} className="flex-1 py-3 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-xs font-black rounded-xl hover:bg-slate-200 transition">
+                                        RECLAMAR
+                                    </button>
+                                    <button onClick={() => onComplete(req)} className="flex-[2] py-3 bg-emerald-500 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-200 dark:shadow-none hover:bg-emerald-600 transition tracking-wider flex items-center justify-center gap-2">
+                                        <CheckCircle2 size={16}/> APROBAR Y PAGAR
+                                    </button>
+                                </div>
+                             </div>
+                        )}
+                        
+                        {/* 5. TRABAJADOR: ESPERANDO APROBACIÓN */}
+                        {amIWorker && req.status === 'delivered' && (
+                            <p className="text-center text-xs text-emerald-600 dark:text-emerald-400 font-bold py-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
+                                <Clock size={12} className="inline mr-2"/>
+                                Entregado. Esperando liberación de fondos por el cliente.
+                            </p>
+                        )}
+
+                        {/* 6. FINALIZADO */}
+                        {req.status === 'completed' && (
+                            <p className="text-center text-xs text-green-600 dark:text-green-400 font-black uppercase flex items-center justify-center gap-2 bg-green-50 dark:bg-green-900/20 py-3 rounded-2xl border border-green-200 dark:border-green-800">
+                                <CheckCircle2 size={16} className="fill-green-600 text-white dark:text-slate-900"/> Transacción Finalizada
+                            </p>
+                        )}
+                  </div> 
+                  {/* CIERRE DE ZONA DE ACCIONES */}
+
+                  </div> 
+                  {/* --- CORRECCIÓN AQUÍ: CIERRE DEL CONTENEDOR INTERNO (pl-4) QUE FALTABA --- */}
+
               </div>
             )
           })
@@ -292,7 +363,7 @@ export function WalletView({ profile, paymentRequests = [], onTopUp, onWithdraw 
             <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-white p-8 rounded-[2.5rem] shadow-2xl text-center relative overflow-hidden ring-4 ring-slate-100 dark:ring-slate-800 group">
                 <div className="relative z-10">
                     <p className="text-sm text-indigo-200 font-bold uppercase tracking-widest mb-3 flex items-center justify-center gap-2"><Landmark size={16}/> Tu Saldo Disponible</p>
-                    <h2 className="text-7xl font-black mb-4 tracking-tighter tabular-nums">{profile?.balance || 0}</h2>
+                    <h2 className="text-6xl sm:text-7xl font-black mb-4 tracking-tighter tabular-nums">{formatMoney(profile?.balance)}</h2>
                     <p className="text-sm text-emerald-300 font-black bg-emerald-400/10 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-400/20 shadow-inner">
                         <CreditCard size={16}/> IURIS-COIN
                     </p>
@@ -364,7 +435,7 @@ export function WalletView({ profile, paymentRequests = [], onTopUp, onWithdraw 
             <div>
                 <h3 className="font-black text-xl mb-5 dark:text-white flex items-center gap-2 px-2">Últimos Movimientos</h3>
                 <div className="space-y-3">
-                    {!paymentRequests || paymentRequests.length === 0 ? (
+                    {(!paymentRequests || paymentRequests.length === 0) ? (
                          <EmptyState 
                             icon={Clock} 
                             title="Sin movimientos" 
@@ -379,12 +450,12 @@ export function WalletView({ profile, paymentRequests = [], onTopUp, onWithdraw 
                                 </div>
                                 <div>
                                     <p className="text-sm font-black dark:text-white uppercase tracking-wide">{req.type === 'deposit' ? 'Carga de Saldo' : 'Retiro de Fondos'}</p>
-                                    <p className="text-[11px] text-slate-400 font-bold flex items-center gap-1 mt-0.5"><Clock size={10}/> {new Date(req.created_at).toLocaleDateString()}</p>
+                                    <p className="text-[11px] text-slate-400 font-bold flex items-center gap-1 mt-0.5"><Clock size={10}/> {formatDate(req.created_at)}</p>
                                 </div>
                             </div>
                             <div className="text-right">
                                 <p className={`text-lg font-black mb-1 ${req.type === 'deposit' ? 'text-green-600 dark:text-green-400' : 'text-slate-800 dark:text-white'}`}>
-                                    {req.type === 'deposit' ? '+' : '-'}{req.amount}
+                                    {req.type === 'deposit' ? '+' : '-'}{formatMoney(req.amount)}
                                 </p>
                                 <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-wider ${req.status === 'pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : req.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-800 dark:text-slate-300'}`}>
                                     {req.status === 'pending' ? 'En Revisión' : req.status === 'approved' ? 'Aprobado' : req.status}
@@ -400,6 +471,11 @@ export function WalletView({ profile, paymentRequests = [], onTopUp, onWithdraw 
 
 // --- VISTA 4: PERFIL (TODO REDONDEADO Y MODERNO) ---
 export function ProfileView({ profile, setProfileData, onSave, onVerify, onUploadAvatar, uploading }) {
+    // Protección por si profile es null inicialmente
+    const profileName = profile?.full_name || profile?.email?.split('@')[0] || ''
+    const profileEmail = profile?.email || ''
+    const profileAvatar = profile?.avatar_url || `https://ui-avatars.com/api/?name=${profileName}&background=random`
+
     return (
         <div className="animate-fade-in space-y-8 pb-24 text-center">
              
@@ -408,7 +484,7 @@ export function ProfileView({ profile, setProfileData, onSave, onVerify, onUploa
                  <div className="absolute -bottom-16 left-1/2 -translate-x-1/2">
                     {/* AVATAR CON CAMARA */}
                     <div className="relative inline-block">
-                        <img src={profile?.avatar_url || `https://ui-avatars.com/api/?name=${profile?.email}&background=random`} alt="Perfil" className="w-32 h-32 rounded-[2.5rem] object-cover border-[6px] border-white dark:border-slate-900 shadow-2xl" />
+                        <img src={profileAvatar} alt="Perfil" className="w-32 h-32 rounded-[2.5rem] object-cover border-[6px] border-white dark:border-slate-900 shadow-2xl bg-white" />
                         <label className="absolute -bottom-2 -right-2 bg-indigo-600 text-white p-3 rounded-2xl cursor-pointer hover:bg-indigo-700 shadow-lg transition transform hover:scale-110 active:scale-95 border-4 border-white dark:border-slate-900">
                             {uploading ? <Loader2 size={18} className="animate-spin"/> : <Camera size={18} />}
                             <input type="file" className="hidden" accept="image/*" onChange={onUploadAvatar} />
@@ -419,23 +495,23 @@ export function ProfileView({ profile, setProfileData, onSave, onVerify, onUploa
 
              <div className="space-y-2 pt-14 px-4">
                  <h2 className="text-3xl font-black text-slate-900 dark:text-white flex items-center justify-center gap-2">
-                     {profile?.full_name || profile?.email?.split('@')[0]}
+                     {profileName}
                      {profile?.is_verified && <CheckCircle2 size={26} className="text-blue-500 fill-blue-500 text-white" />}
                  </h2>
-                 <p className="text-sm text-slate-500 dark:text-slate-400 font-bold tracking-wide bg-slate-100 dark:bg-slate-800 inline-block px-4 py-1 rounded-full">{profile?.email}</p>
+                 <p className="text-sm text-slate-500 dark:text-slate-400 font-bold tracking-wide bg-slate-100 dark:bg-slate-800 inline-block px-4 py-1 rounded-full">{profileEmail}</p>
              </div>
 
              {/* FORMULARIO DE PERFIL (INPUTS MASIVOS) */}
              <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-xl shadow-slate-100 dark:shadow-none border border-slate-200 dark:border-slate-800 text-left space-y-6 mx-2">
                  <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
-                    <h3 className="text-base font-black flex items-center gap-3 dark:text-white uppercase tracking-wider"><Briefcase size={20} className="text-indigo-500"/> Datos Públicos</h3>
+                    <h3 className="text-base font-black flex items-center gap-3 dark:text-white uppercase tracking-wider"><BriefcaseIcon size={20} className="text-indigo-500"/> Datos Públicos</h3>
                  </div>
                  
                  <div className="space-y-6">
                     <div>
                         <label className="text-xs font-black text-slate-400 uppercase mb-3 block tracking-wider ml-2">Nombre Visible</label>
                         <input 
-                            value={profile?.full_name || ''} 
+                            value={profileName} 
                             onChange={(e) => setProfileData({...profile, full_name: e.target.value})}
                             className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-3xl text-base font-bold dark:text-white outline-none focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 border-2 border-transparent focus:border-indigo-500 transition"
                             placeholder="Ej: Juan Pérez"

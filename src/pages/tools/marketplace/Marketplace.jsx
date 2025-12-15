@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Wallet, Search, Bell, CreditCard, User, Upload, X, Loader2, DollarSign, FileText, Camera, AlertCircle, CheckCircle2, Info } from 'lucide-react'
+import { ArrowLeft, Wallet, Search, Bell, CreditCard, User, Upload, X, Loader2, DollarSign, FileText, Camera, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { FeedView, WalletView, InboxView, ProfileView } from './MarketViews'
 
@@ -34,7 +34,7 @@ export default function Marketplace() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   
   // Toast State
-  const [toast, setToast] = useState(null) // { message: '', type: 'success'|'error' }
+  const [toast, setToast] = useState(null) 
 
   // Data
   const [items, setItems] = useState([])
@@ -44,6 +44,8 @@ export default function Marketplace() {
   // Forms
   const [formPublish, setFormPublish] = useState({ title: '', desc: '', price: '', file: null })
   const [formRequest, setFormRequest] = useState({ note: '', file: null })
+  const [deliveryForm, setDeliveryForm] = useState({ note: '', file: null }) 
+  
   const [selectedItem, setSelectedItem] = useState(null)
   const [topUpAmount, setTopUpAmount] = useState('')
   const [topUpFile, setTopUpFile] = useState(null)
@@ -97,9 +99,11 @@ export default function Marketplace() {
                 notify("¡Trabajo finalizado y pagado!", 'success', true)
             } else if (payload.eventType === 'UPDATE' && payload.new.status === 'accepted') {
                 notify("¡Propuesta aceptada!", 'success', true)
+            } else if (payload.eventType === 'UPDATE' && payload.new.status === 'delivered' && payload.new.to_id === session.user.id) {
+                notify("¡Han entregado el trabajo! Revisa para liberar fondos.", 'success', true)
             }
 
-            // Actualizar datos SILENCIOSAMENTE (sin recargar página)
+            // Actualizar datos SILENCIOSAMENTE
             fetchAllData(session.user.id)
           }
         }
@@ -242,7 +246,7 @@ export default function Marketplace() {
   const sendWorkRequest = async () => {
     if (!selectedItem?.owner_id) return notify("Error: Item sin dueño", 'error')
 
-    // Si es SERVICIO, cobrar YA
+    // Si es SERVICIO, cobrar YA (Bloquear fondos)
     if (selectedItem.section === 'servicios') {
         if (profile.balance < selectedItem.price) return notify("Saldo insuficiente. Recarga IURIS-COINS.", 'error')
         const { error } = await supabase.from('profiles').update({ balance: profile.balance - selectedItem.price }).eq('id', session.user.id)
@@ -302,7 +306,41 @@ export default function Marketplace() {
       fetchAllData(session.user.id)
   }
 
-  // 7. COMPLETAR (USANDO RPC PARA PAGAR AL TRABAJADOR)
+  // 7. ENTREGAR TRABAJO (FLUJO ESCROW)
+  const deliverWork = async () => {
+    if (!selectedItem) return; 
+    setLoading(true)
+    try {
+        let url = null
+        if (deliveryForm.file) {
+            url = await uploadFile(deliveryForm.file)
+        } else {
+            setLoading(false)
+            return notify("Debes subir un archivo de entrega obligatoriamente.", 'error')
+        }
+
+        const { error } = await supabase
+            .from('market_requests')
+            .update({ 
+                status: 'delivered', 
+                delivery_file_url: url,
+                delivery_note: deliveryForm.note,
+                delivery_at: new Date()
+            })
+            .eq('id', selectedItem.id)
+
+        if (error) throw error
+        notify("¡Trabajo entregado! Esperando aprobación.", 'success', true)
+        setShowModal(null)
+        setDeliveryForm({ note: '', file: null })
+        fetchAllData(session.user.id)
+    } catch (e) {
+        notify(e.message, 'error')
+    }
+    setLoading(false)
+  }
+
+  // 8. COMPLETAR (USANDO RPC PARA PAGAR AL TRABAJADOR)
   const handleCompleteRequest = async (req) => {
       if(!confirm("¿Confirmar finalización? Se liberarán los fondos.")) return;
 
@@ -310,7 +348,6 @@ export default function Marketplace() {
       let earnerId = req.item_data?.section === 'servicios' ? req.to_id : req.from_id
 
       try {
-          // LLAMADA A LA FUNCIÓN SQL SEGURA QUE CREAMOS EN EL PASO 1
           const { error } = await supabase.rpc('finish_job_transaction', { 
               p_request_id: req.id, 
               p_earner_id: earnerId 
@@ -401,7 +438,8 @@ export default function Marketplace() {
                 currentUserId={session.user.id} 
                 onAccept={handleAcceptRequest} 
                 onReject={handleRejectRequest} 
-                onComplete={handleCompleteRequest} 
+                onComplete={handleCompleteRequest}
+                onDeliver={(req) => { setSelectedItem(req); setShowModal('deliver') }} 
             />
         )}
         
@@ -430,6 +468,7 @@ export default function Marketplace() {
                     <h3 className="font-black text-xl text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                         {showModal === 'publish' && <><FileText size={24} className="text-indigo-500"/> Crear Anuncio</>}
                         {showModal === 'request' && <><FileText size={24} className="text-indigo-500"/> {selectedItem?.section === 'trabajos' ? 'Postularme' : 'Contratar'}</>}
+                        {showModal === 'deliver' && <><Upload size={24} className="text-indigo-500"/> Entregar Trabajo</>}
                         {showModal === 'topup' && <><Wallet size={24} className="text-emerald-500"/> Cargar Saldo</>}
                         {showModal === 'withdraw' && <><CreditCard size={24} className="text-amber-500"/> Retirar</>}
                     </h3>
@@ -478,7 +517,35 @@ export default function Marketplace() {
                     </div>
                 )}
 
-                {/* 3. RECARGAR (TOPUP) */}
+                {/* 3. ENTREGAR TRABAJO (NUEVO MODAL) */}
+                {showModal === 'deliver' && (
+                    <div className="space-y-4">
+                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800">
+                             <h4 className="font-black text-indigo-700 dark:text-indigo-400 text-sm uppercase mb-1">Entregable Final</h4>
+                             <p className="text-xs text-slate-600 dark:text-slate-300">Sube el documento final para que el cliente lo revise y libere el pago.</p>
+                        </div>
+
+                        <textarea 
+                            className="input-modern h-32" 
+                            placeholder="Comentarios sobre la entrega (Ej: Aquí adjunto el resumen finalizado...)" 
+                            onChange={e => setDeliveryForm({...deliveryForm, note: e.target.value})}
+                        />
+
+                        <label className="file-upload-modern border-indigo-200 dark:border-indigo-800 bg-indigo-50/50">
+                            <Upload className="mx-auto mb-2 text-indigo-500"/>
+                            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                {deliveryForm.file ? deliveryForm.file.name : "Subir Archivo Final (PDF/Word)"}
+                            </span>
+                            <input type="file" className="hidden" onChange={e => setDeliveryForm({...deliveryForm, file: e.target.files[0]})}/>
+                        </label>
+
+                        <button onClick={deliverWork} disabled={loading} className="btn-modern bg-indigo-600 text-white">
+                            {loading ? <Loader2 className="animate-spin"/> : 'ENVIAR ENTREGA PARA REVISIÓN'}
+                        </button>
+                    </div>
+                )}
+
+                {/* 4. RECARGAR (TOPUP) */}
                 {showModal === 'topup' && (
                     <div className="space-y-6 text-center">
                         <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-200 dark:border-slate-700">
@@ -506,7 +573,7 @@ export default function Marketplace() {
                     </div>
                 )}
 
-                {/* 4. RETIRAR */}
+                {/* 5. RETIRAR */}
                 {showModal === 'withdraw' && (
                     <div className="space-y-4">
                         <div className="grid gap-4">
