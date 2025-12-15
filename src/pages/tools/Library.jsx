@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-// CORRECCIÓN: Quitamos 'Image' y 'ImageIcon' para evitar conflictos. Usamos 'Camera'.
 import { 
   Book, Search, Plus, Download, ShoppingCart, 
-  Loader2, DollarSign, FileText, Camera, X, ArrowLeft, Wallet, Upload
+  Loader2, DollarSign, FileText, Camera, X, ArrowLeft, Wallet, Upload, Trash2
 } from 'lucide-react'
 
 // Utilidad moneda
@@ -40,10 +39,12 @@ export default function Library() {
         if(prof) setProfile(prof)
 
         // 2. Libros disponibles
-        const { data: books } = await supabase
+        const { data: books, error } = await supabase
             .from('ebooks')
             .select('*, profiles(full_name)')
             .order('created_at', { ascending: false })
+        
+        if (error) console.error("Error fetching books:", error)
         setEbooks(books || [])
 
         // 3. Mis compras
@@ -55,7 +56,7 @@ export default function Library() {
         const purchaseIds = purchases?.map(p => p.ebook_id) || []
         setMyPurchases(purchaseIds)
     } catch (e) {
-        console.error("Error cargando librería:", e)
+        console.error("Error general:", e)
     }
     setLoading(false)
   }
@@ -77,7 +78,6 @@ export default function Library() {
           }
 
           // 2. Subir Archivo (Privado)
-          // Limpiamos el nombre del archivo para evitar errores de caracteres especiales
           const safeFileName = form.file.name.replace(/[^a-zA-Z0-9.]/g, '_')
           const fileName = `book_${Date.now()}_${safeFileName}`
           
@@ -100,12 +100,28 @@ export default function Library() {
           alert("¡Libro publicado exitosamente!")
           setShowModal(false)
           setForm({ title: '', desc: '', price: '', cover: null, file: null })
+          // Recargar datos inmediatamente
           loadData(session.user.id)
 
       } catch (error) {
           alert("Error: " + error.message)
       }
       setUploading(false)
+  }
+
+  // --- BORRAR LIBRO (Solo Dueño) ---
+  const handleDelete = async (bookId) => {
+      if (!confirm("¿Estás seguro de eliminar este libro de la tienda?")) return;
+
+      try {
+          const { error } = await supabase.from('ebooks').delete().eq('id', bookId)
+          if (error) throw error
+          
+          alert("Libro eliminado.")
+          loadData(session.user.id) // Refrescar lista
+      } catch (error) {
+          alert("Error al borrar: " + error.message)
+      }
   }
 
   // --- COMPRAR LIBRO ---
@@ -177,10 +193,21 @@ export default function Library() {
         <div className="grid grid-cols-2 gap-4">
             {ebooks.map(book => {
                 const isOwned = myPurchases.includes(book.id) || book.owner_id === session?.user?.id
+                const isMyBook = book.owner_id === session?.user?.id
                 
                 return (
                     <div key={book.id} className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col h-full relative group">
                         
+                        {/* BOTÓN DE BORRAR (SOLO SI ES MÍO) */}
+                        {isMyBook && (
+                            <button 
+                                onClick={() => handleDelete(book.id)}
+                                className="absolute top-2 left-2 z-20 bg-red-500 text-white p-1.5 rounded-full shadow-md hover:scale-110 transition opacity-0 group-hover:opacity-100"
+                            >
+                                <Trash2 size={12} />
+                            </button>
+                        )}
+
                         {/* PORTADA */}
                         <div className="aspect-[3/4] bg-slate-100 dark:bg-slate-800 rounded-xl mb-3 overflow-hidden relative">
                             {book.cover_url ? (
@@ -246,14 +273,12 @@ export default function Library() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                        {/* INPUT PARA PORTADA */}
                         <label className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                             <Camera className="mx-auto mb-2 text-slate-400"/>
                             <span className="text-[10px] font-bold block text-slate-500">{form.cover ? "Portada Lista" : "Subir Portada"}</span>
                             <input type="file" accept="image/*" className="hidden" onChange={e => setForm({...form, cover: e.target.files[0]})}/>
                         </label>
 
-                        {/* INPUT PARA ARCHIVO */}
                         <label className="border-2 border-dashed border-indigo-200 dark:border-indigo-900/50 bg-indigo-50 dark:bg-indigo-900/10 rounded-2xl p-4 text-center cursor-pointer hover:bg-indigo-100 transition">
                             <FileText className="mx-auto mb-2 text-indigo-500"/>
                             <span className="text-[10px] font-bold block text-indigo-600">{form.file ? "Archivo Listo" : "Subir PDF/DOC"}</span>
