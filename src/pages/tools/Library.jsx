@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { 
   Book, Search, Plus, Download, ShoppingCart, 
-  Loader2, DollarSign, FileText, Camera, X, ArrowLeft, Wallet, Upload, Trash2
+  Loader2, DollarSign, FileText, Camera, X, ArrowLeft, Wallet, Upload, Trash2, EyeOff
 } from 'lucide-react'
 
 // Utilidad moneda
@@ -38,13 +38,11 @@ export default function Library() {
         const { data: prof } = await supabase.from('profiles').select('*').eq('id', userId).single()
         if(prof) setProfile(prof)
 
-        // 2. Libros disponibles
-        const { data: books, error } = await supabase
+        // 2. Libros (Traemos TODOS, activos e inactivos)
+        const { data: books } = await supabase
             .from('ebooks')
             .select('*, profiles(full_name)')
             .order('created_at', { ascending: false })
-        
-        if (error) console.error("Error fetching books:", error)
         setEbooks(books || [])
 
         // 3. Mis compras
@@ -67,7 +65,7 @@ export default function Library() {
       
       setUploading(true)
       try {
-          // 1. Subir Portada (Pública)
+          // 1. Subir Portada
           let coverUrl = null
           if (form.cover) {
               const coverName = `cover_${Date.now()}`
@@ -77,14 +75,13 @@ export default function Library() {
               coverUrl = publicUrl.publicUrl
           }
 
-          // 2. Subir Archivo (Privado)
+          // 2. Subir Archivo
           const safeFileName = form.file.name.replace(/[^a-zA-Z0-9.]/g, '_')
           const fileName = `book_${Date.now()}_${safeFileName}`
-          
           const { error: fileErr } = await supabase.storage.from('ebook-files').upload(fileName, form.file)
           if (fileErr) throw fileErr
 
-          // 3. Guardar en BD
+          // 3. Guardar en BD (Por defecto is_active es true)
           const { error: dbErr } = await supabase.from('ebooks').insert({
               owner_id: session.user.id,
               title: form.title,
@@ -92,7 +89,8 @@ export default function Library() {
               price: parseInt(form.price),
               cover_url: coverUrl,
               file_path: fileName, 
-              file_type: form.file.name.split('.').pop().toUpperCase()
+              file_type: form.file.name.split('.').pop().toUpperCase(),
+              is_active: true 
           })
 
           if (dbErr) throw dbErr
@@ -108,18 +106,23 @@ export default function Library() {
       setUploading(false)
   }
 
-  // --- BORRAR LIBRO (Solo Dueño) ---
-  const handleDelete = async (bookId) => {
-      if (!confirm("¿Estás seguro de eliminar este libro de la tienda?")) return;
+  // --- BORRADO LÓGICO (SOFT DELETE) ---
+  // En lugar de borrar, lo archivamos para que nadie nuevo compre, pero los dueños lo conserven.
+  const handleArchive = async (bookId) => {
+      if (!confirm("¿Retirar este libro de la venta? Los usuarios que ya lo compraron podrán seguir accediendo, pero nadie nuevo podrá comprarlo.")) return;
 
       try {
-          const { error } = await supabase.from('ebooks').delete().eq('id', bookId)
+          const { error } = await supabase
+            .from('ebooks')
+            .update({ is_active: false }) // <--- Aquí está la magia
+            .eq('id', bookId)
+
           if (error) throw error
           
-          alert("Libro eliminado.")
-          loadData(session.user.id) // Refrescar lista
+          alert("Libro retirado de la tienda.")
+          loadData(session.user.id)
       } catch (error) {
-          alert("Error al borrar: " + error.message)
+          alert("Error al archivar: " + error.message)
       }
   }
 
@@ -136,10 +139,8 @@ export default function Library() {
           })
 
           if (error) throw error
-          
           alert("¡Compra exitosa!")
           loadData(session.user.id) 
-
       } catch (error) {
           alert("Error en la compra: " + error.message)
       }
@@ -155,7 +156,6 @@ export default function Library() {
 
           if (error) throw error
           window.open(data.signedUrl, '_blank')
-
       } catch (error) {
           alert("Error al generar descarga: " + error.message)
       }
@@ -194,23 +194,36 @@ export default function Library() {
                 const isOwned = myPurchases.includes(book.id) || book.owner_id === session?.user?.id
                 const isMyBook = book.owner_id === session?.user?.id
                 
+                // LÓGICA DE VISIBILIDAD:
+                // Si está activo: Lo ve todo el mundo.
+                // Si NO está activo: Solo lo ve el dueño o quien lo compró.
+                if (!book.is_active && !isOwned) return null;
+
                 return (
-                    <div key={book.id} className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col h-full relative group">
+                    <div key={book.id} className={`p-3 rounded-2xl border shadow-sm flex flex-col h-full relative group ${book.is_active ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800' : 'bg-slate-100 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 opacity-80'}`}>
                         
-                        {/* BOTÓN DE BORRAR (SOLO SI ES MÍO) */}
-                        {isMyBook && (
+                        {/* ETIQUETA DE ARCHIVADO */}
+                        {!book.is_active && (
+                            <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-[9px] font-black text-center py-1 rounded-t-2xl z-20">
+                                PRODUCTO RETIRADO
+                            </div>
+                        )}
+
+                        {/* BOTÓN DE ARCHIVAR (SOLO SI ES MÍO Y ESTÁ ACTIVO) */}
+                        {isMyBook && book.is_active && (
                             <button 
-                                onClick={() => handleDelete(book.id)}
-                                className="absolute top-2 left-2 z-20 bg-red-500 text-white p-1.5 rounded-full shadow-md hover:scale-110 transition opacity-0 group-hover:opacity-100"
+                                onClick={() => handleArchive(book.id)}
+                                className="absolute top-2 left-2 z-20 bg-slate-900/80 backdrop-blur-md text-white p-1.5 rounded-full shadow-md hover:bg-red-500 transition opacity-0 group-hover:opacity-100"
+                                title="Retirar de la tienda"
                             >
-                                <Trash2 size={12} />
+                                <EyeOff size={12} />
                             </button>
                         )}
 
                         {/* PORTADA */}
-                        <div className="aspect-[3/4] bg-slate-100 dark:bg-slate-800 rounded-xl mb-3 overflow-hidden relative">
+                        <div className="aspect-[3/4] bg-slate-100 dark:bg-slate-800 rounded-xl mb-3 overflow-hidden relative mt-2">
                             {book.cover_url ? (
-                                <img src={book.cover_url} className="w-full h-full object-cover transition group-hover:scale-105 duration-500" />
+                                <img src={book.cover_url} className={`w-full h-full object-cover transition duration-500 ${book.is_active ? 'group-hover:scale-105' : 'grayscale'}`} />
                             ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                                     <FileText size={40} strokeWidth={1.5}/>
