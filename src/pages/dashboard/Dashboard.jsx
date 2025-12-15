@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import useTheme from '../../hooks/useTheme'
-// Importamos los iconos
-import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag } from 'lucide-react'
+// Importamos los iconos (Agregado 'Book' para la librería)
+import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag, Book } from 'lucide-react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 
 export default function Dashboard() {
@@ -24,7 +24,7 @@ export default function Dashboard() {
     getAverage()
     // --- LLAMADA A LAS NUEVAS FUNCIONES AL CARGAR EL DASHBOARD ---
     fetchProximaTarea()
-    fetchProgresoData() // <-- Ahora llama a la función corregida
+    fetchProgresoData() 
     // -----------------------------------------------------------
   }, [location])
 
@@ -61,7 +61,7 @@ export default function Dashboard() {
     navigate('/')
   }
 
-  // --- FUNCIÓN: CARGA EL PRÓXIMO EVENTO DE LA AGENDA (SIN CAMBIOS) ---
+  // --- FUNCIÓN: CARGA EL PRÓXIMO EVENTO DE LA AGENDA ---
   const fetchProximaTarea = async () => {
     setLoadingAgenda(true)
     const { data, error } = await supabase
@@ -91,7 +91,6 @@ export default function Dashboard() {
   }
   
   // --- FUNCIÓN REAL CORREGIDA: CARGA DATOS DEL TRACKER DE PROGRESO ---
-  // Usa la tabla 'student_progress' y la lógica de bolillas.
   const fetchProgresoData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -100,7 +99,7 @@ export default function Dashboard() {
     }
 
     const { data: trackerEntries, error } = await supabase
-        .from('student_progress') // <-- Usando el nombre de tabla CORREGIDO
+        .from('student_progress') 
         .select('subject_id, bolilla_number')
         .eq('user_id', user.id)
 
@@ -122,7 +121,7 @@ export default function Dashboard() {
         
         // 2. Determinar la bolilla más alta registrada en general
         let maxBolilla = 0;
-        let mostAdvancedSubject = 'N/A'; // Nombre de la materia con el progreso más alto
+        let mostAdvancedSubject = 'N/A'; 
 
         for (const [subject, bolilla] of Object.entries(progressBySubject)) {
             if (bolilla > maxBolilla) {
@@ -131,7 +130,6 @@ export default function Dashboard() {
             }
         }
 
-        // Si hay una materia más avanzada, mostrar el resumen detallado
         if (numMaterias > 0) {
             setProgresoData(`Avanzando en ${numMaterias} materias. Última bolilla: ${maxBolilla} (${mostAdvancedSubject})`);
         } else {
@@ -147,7 +145,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 pb-24 transition-colors duration-300">
       
-      {/* HEADER (SIN CAMBIOS) */}
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Hola, Colega</h1>
@@ -173,7 +171,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* TARJETA PROMEDIO (SIN CAMBIOS) */}
+      {/* TARJETA PROMEDIO */}
       <Link to="/gpa" className="block transform transition hover:scale-[1.02] active:scale-95 mb-6">
         <div className="bg-slate-900 dark:bg-slate-800 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden cursor-pointer border border-transparent dark:border-slate-700">
           <div className="relative z-10">
@@ -198,13 +196,13 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* SECCIÓN HERRAMIENTAS (SIN CAMBIOS) */}
+      {/* SECCIÓN HERRAMIENTAS */}
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Herramientas</h3>
 
-      {/* 1. MERCADO UNA (SIN CAMBIOS) */}
+      {/* 1. MERCADO UNA */}
       <Link to="/market" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-indigo-400 group relative overflow-hidden">
-          {/* Efecto de brillo al pasar el mouse */}
+          {/* Efecto de brillo */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-indigo-50 dark:to-indigo-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
           <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
@@ -217,7 +215,23 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* 2. LÉXICO DE PODER (SIN CAMBIOS) */}
+      {/* 2. LIBRERÍA DIGITAL (NUEVO BOTÓN) */}
+      <Link to="/library" className="block mb-3">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-fuchsia-400 group relative overflow-hidden">
+          {/* Efecto de brillo */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-fuchsia-50 dark:to-fuchsia-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          
+          <div className="bg-gradient-to-br from-fuchsia-500 to-pink-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
+            <Book size={24} />
+          </div>
+          <div className="z-10">
+            <h4 className="font-bold text-slate-800 dark:text-slate-100">Librería IURIS</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Ebooks & Resúmenes</p>
+          </div>
+        </div>
+      </Link>
+
+      {/* 3. LÉXICO DE PODER */}
       <Link to="/lexicon" className="block mb-6">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-amber-400 group">
           <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-lg text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
@@ -234,11 +248,10 @@ export default function Dashboard() {
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Tu Agenda</h3>
       
       <div className="space-y-3">
-        {/* Card 1: PRÓXIMO PARCIAL (Conectado a tareas_agenda) */}
+        {/* Card 1: PRÓXIMO PARCIAL */}
         <Link to="/agenda" className="block">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-blue-400">
             {loadingAgenda ? (
-                // Estado de carga
                 <div className="flex items-center gap-4">
                     <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-blue-600 dark:text-blue-400 animate-pulse">
                         <CalendarCheck size={24} />
@@ -246,7 +259,6 @@ export default function Dashboard() {
                     <p className="text-sm text-slate-500 dark:text-slate-400">Cargando próximos eventos...</p>
                 </div>
             ) : (
-                // Datos reales o placeholder
                 <>
                     <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-blue-600 dark:text-blue-400">
                         <CalendarCheck size={24} />
@@ -263,7 +275,7 @@ export default function Dashboard() {
         </Link>
 
 
-        {/* Card 2: PROGRESO DE ESTUDIO (Conectado a student_progress) */}
+        {/* Card 2: PROGRESO DE ESTUDIO */}
         <Link to="/tracker" className="block">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-emerald-400">
                 <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg text-emerald-600 dark:text-emerald-400">
