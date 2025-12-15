@@ -100,7 +100,6 @@ export default function Library() {
           alert("¡Libro publicado exitosamente!")
           setShowModal(false)
           setForm({ title: '', desc: '', price: '', cover: null, file: null })
-          // Recargar datos inmediatamente
           loadData(session.user.id)
 
       } catch (error) {
@@ -235,7 +234,7 @@ export default function Library() {
                                     </button>
                                 ) : (
                                     <button onClick={() => handleBuy(book)} className="w-full py-3 bg-slate-900 text-white dark:bg-white dark:text-slate-900 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition">
-                                        <ShoppingCart size={14}/> {formatMoney(book.price)} Gs
+                                        <ShoppingCart size={14}/> {formatMoney(book.price)} IURIS
                                     </button>
                                 )}
                             </div>
