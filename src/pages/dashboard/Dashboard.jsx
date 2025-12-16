@@ -155,7 +155,7 @@ export default function Dashboard() {
         
         <div className="flex gap-2 items-center">
           
-          {/* --- BOTÓN DE NOTIFICACIONES --- */}
+          {/* --- AQUÍ ESTÁ EL BOTÓN DE NOTIFICACIONES --- */}
           <NotificationButton />
 
           {/* BOTÓN TEMA */}
