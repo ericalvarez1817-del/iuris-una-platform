@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Bell, BellRing, Loader2 } from 'lucide-react'
-import { urlBase64ToUint8Array } from 'url-base64-to-uint8array'
 
-// TU CLAVE PÚBLICA (Esta sí es segura ponerla aquí)
+// TU CLAVE PÚBLICA VAPID
 const PUBLIC_VAPID_KEY = "BKWrd9a6QCkWByoTyh-yG3_8-UgG5q1Ojp3mZDRAyqUFqkD0PL9fJJKBItCOqGiQ_JNRgP3J_tSQDDV3naXw9gY"
 
 export default function NotificationButton() {
@@ -17,13 +16,13 @@ export default function NotificationButton() {
       const registration = await navigator.serviceWorker.ready
 
       // 2. Pedir suscripción al navegador (Google/Apple)
+      // Usamos la función interna convertida manualmente
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
       })
 
       // 3. Preparar datos para Supabase
-      // La suscripción es un objeto complejo, lo desglosamos
       const subscriptionJson = subscription.toJSON()
       const { data: { user } } = await supabase.auth.getUser()
 
@@ -35,7 +34,7 @@ export default function NotificationButton() {
         endpoint: subscriptionJson.endpoint,
         p256dh: subscriptionJson.keys.p256dh,
         auth: subscriptionJson.keys.auth
-      }, { onConflict: 'user_id, endpoint' }) // Evita duplicados si es el mismo dispositivo
+      }, { onConflict: 'user_id, endpoint' })
 
       if (error) throw error
 
@@ -63,4 +62,20 @@ export default function NotificationButton() {
       {isSubscribed ? 'Notificaciones Activas' : 'Activar Alertas'}
     </button>
   )
+}
+
+// --- FUNCIÓN UTILITARIA (INTEGRADA PARA EVITAR ERRORES DE BUILD) ---
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
