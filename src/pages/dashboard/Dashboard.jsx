@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import useTheme from '../../hooks/useTheme'
-// Importamos los iconos (Agregado 'Newspaper' para las noticias)
-import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag, Book, Newspaper } from 'lucide-react'
+// Importamos los iconos (Agregado 'MessageCircle' para el chat)
+import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag, Book, Newspaper, MessageCircle } from 'lucide-react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 
 export default function Dashboard() {
@@ -199,7 +199,23 @@ export default function Dashboard() {
       {/* SECCIÓN HERRAMIENTAS */}
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Herramientas</h3>
 
-      {/* 1. IURIS NEWS (NUEVO) */}
+      {/* 0. IURIS CHAT (NUEVO) */}
+      <Link to="/chat" className="block mb-3">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-green-400 group relative overflow-hidden">
+          {/* Efecto de brillo */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-green-50 dark:to-green-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          
+          <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
+            <MessageCircle size={24} />
+          </div>
+          <div className="z-10">
+            <h4 className="font-bold text-slate-800 dark:text-slate-100">IURIS Chat</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Grupos & Comunidad</p>
+          </div>
+        </div>
+      </Link>
+
+      {/* 1. IURIS NEWS */}
       <Link to="/news" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-blue-400 group relative overflow-hidden">
           {/* Efecto de brillo */}
@@ -231,7 +247,7 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* 3. LIBRERÍA DIGITAL (NUEVO BOTÓN) */}
+      {/* 3. LIBRERÍA DIGITAL */}
       <Link to="/library" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-fuchsia-400 group relative overflow-hidden">
           {/* Efecto de brillo */}

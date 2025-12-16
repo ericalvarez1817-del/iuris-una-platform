@@ -22,6 +22,10 @@ import Library from './pages/tools/Library'
 // NUEVA IMPORTACIÓN: Noticias IURIS
 import NewsFeed from './pages/news/NewsFeed'
 
+// --- NUEVAS IMPORTACIONES: CHAT IURIS ---
+import ChatList from './pages/chat/ChatList'
+import ChatRoom from './pages/chat/ChatRoom'
+
 // IMPORTANTE: Importar el Panel de Administración que creamos
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
 
@@ -54,6 +58,10 @@ function App() {
           {/* NUEVA RUTA: NOTICIAS IURIS */}
           <Route path="/news" element={<NewsFeed />} />
           
+          {/* --- RUTAS DE CHAT --- */}
+          <Route path="/chat" element={<ChatList />} />
+          <Route path="/chat/:roomId" element={<ChatRoom />} />
+
           {/* Leyes */}
           <Route path="/laws" element={<LawsSearch />} />
           <Route path="/laws/:id" element={<LawDetails />} />
