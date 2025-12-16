@@ -19,6 +19,9 @@ import Marketplace from './pages/tools/marketplace/Marketplace'
 // NUEVA IMPORTACIÓN: Librería de Ebooks
 import Library from './pages/tools/Library'
 
+// NUEVA IMPORTACIÓN: Noticias IURIS
+import NewsFeed from './pages/news/NewsFeed'
+
 // IMPORTANTE: Importar el Panel de Administración que creamos
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
 
@@ -47,6 +50,9 @@ function App() {
 
           {/* NUEVA RUTA: LIBRERÍA DE EBOOKS */}
           <Route path="/library" element={<Library />} />
+
+          {/* NUEVA RUTA: NOTICIAS IURIS */}
+          <Route path="/news" element={<NewsFeed />} />
           
           {/* Leyes */}
           <Route path="/laws" element={<LawsSearch />} />
