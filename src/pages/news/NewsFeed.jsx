@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase'
 import { 
   Newspaper, Calendar, ChevronRight, Search, 
   Building2, Scale, PartyPopper, X, Plus, 
-  Loader2, Image as ImageIcon, BadgeCheck, User, Trash2 // <--- Agregamos Trash2
+  Loader2, Image as ImageIcon, BadgeCheck, User, Trash2
 } from 'lucide-react'
 
-// TU ID DE ADMIN (Para que siempre puedas borrar cualquier cosa)
+// TU ID DE ADMIN
 const ADMIN_ID = '8ce7cf5d-700f-419e-a180-c5c1af8f627c'
 
 const formatDate = (dateString) => {
@@ -33,7 +33,6 @@ export default function NewsFeed() {
 
   const fetchNews = async () => {
     setLoading(true)
-    // Traemos la noticia Y los datos del autor (nombre e insignia)
     const { data, error } = await supabase
       .from('news')
       .select('*, profiles(full_name, is_reporter, avatar_url)')
@@ -77,15 +76,14 @@ export default function NewsFeed() {
       setUploading(false)
   }
 
-  // --- FUNCIÓN DE BORRADO ---
   const handleDelete = async (e, newsId) => {
-      e.stopPropagation() // Evita que se abra el modal de lectura al hacer click en borrar
+      e.stopPropagation()
       if(!confirm("¿Borrar esta noticia permanentemente?")) return
 
       try {
           const { error } = await supabase.from('news').delete().eq('id', newsId)
           if(error) throw error
-          fetchNews() // Recargar lista
+          fetchNews()
       } catch (error) {
           alert("Error al borrar: " + error.message)
       }
@@ -111,7 +109,6 @@ export default function NewsFeed() {
                 </h1>
                 <p className="text-[10px] text-slate-500 font-medium">La voz de los estudiantes</p>
             </div>
-            {/* BOTÓN PUBLICAR (PARA TODOS) */}
             <button onClick={() => setShowModal(true)} className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 p-2 rounded-full shadow-lg active:scale-95 transition">
                 <Plus size={20} />
             </button>
@@ -143,7 +140,6 @@ export default function NewsFeed() {
            <p className="text-center text-slate-400 text-xs py-10">No hay noticias aún. ¡Sé el primero!</p>
         ) : (
           filteredNews.map(item => {
-            // Verificar si puedo borrar (Soy el autor O soy el Admin Supremo)
             const canDelete = session?.user?.id === item.author_id || session?.user?.id === ADMIN_ID;
 
             return (
@@ -152,7 +148,6 @@ export default function NewsFeed() {
                 onClick={() => setSelectedNews(item)}
                 className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer active:scale-[0.99] relative group"
                 >
-                {/* BOTÓN DE BORRAR (SOLO AUTORIZADOS) */}
                 {canDelete && (
                     <button 
                         onClick={(e) => handleDelete(e, item.id)}
@@ -162,7 +157,6 @@ export default function NewsFeed() {
                     </button>
                 )}
 
-                {/* HEADER DE AUTOR */}
                 <div className="p-3 flex items-center gap-2 border-b border-slate-50 dark:border-slate-800">
                     <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden">
                         <img src={item.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${item.profiles?.full_name}&background=random`} className="w-full h-full object-cover"/>
@@ -170,7 +164,6 @@ export default function NewsFeed() {
                     <div>
                         <p className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1">
                             {item.profiles?.full_name || 'Anónimo'}
-                            {/* INSIGNIA DE VERIFICADO (SOLO SI ES REPORTERO) */}
                             {item.profiles?.is_reporter && (
                                 <BadgeCheck size={14} className="text-blue-500 fill-blue-500 text-white" />
                             )}
@@ -202,33 +195,72 @@ export default function NewsFeed() {
         )}
       </div>
 
-      {/* MODAL LECTURA */}
+      {/* MODAL LECTURA (ESTILO ABC COLOR / PRENSA PROFESIONAL) */}
       {selectedNews && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] sm:rounded-[2rem] rounded-t-[2rem] overflow-y-auto relative shadow-2xl">
-            <button onClick={() => setSelectedNews(null)} className="absolute top-4 right-4 z-20 p-2 bg-black/30 backdrop-blur-md text-white rounded-full"><X size={20}/></button>
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full h-full sm:h-[90vh] sm:max-w-xl sm:rounded-2xl overflow-y-auto relative shadow-2xl flex flex-col">
             
+            {/* Botón cerrar flotante */}
+            <button 
+                onClick={() => setSelectedNews(null)} 
+                className="absolute top-4 right-4 z-50 p-2 bg-black/50 backdrop-blur-md text-white rounded-full hover:bg-black/70 transition"
+            >
+                <X size={24}/>
+            </button>
+            
+            {/* Imagen Principal (Hero Image) */}
             {selectedNews.image_url && (
-              <img src={selectedNews.image_url} className="w-full h-64 object-cover" />
+              <div className="w-full h-64 sm:h-72 shrink-0 relative">
+                  <img src={selectedNews.image_url} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  {/* Categoría sobre la imagen */}
+                  <div className="absolute bottom-4 left-4">
+                        <span className={`inline-block px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest text-white ${
+                            selectedNews.category === 'UNA' ? 'bg-blue-600' : 
+                            selectedNews.category === 'JURIDICO' ? 'bg-slate-600' : 'bg-purple-600'
+                        }`}>
+                            {selectedNews.category}
+                        </span>
+                  </div>
+              </div>
             )}
 
-            <div className="p-6">
-               <div className="flex items-center gap-2 mb-4">
-                    <img src={selectedNews.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${selectedNews.profiles?.full_name}&background=random`} className="w-10 h-10 rounded-full border-2 border-white shadow-sm"/>
+            {/* Contenido del Artículo */}
+            <div className={`p-6 sm:p-8 ${!selectedNews.image_url ? 'pt-16' : ''} flex-1`}>
+               
+               {/* Metadata Autor */}
+               <div className="flex items-center gap-3 mb-6 border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <img src={selectedNews.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${selectedNews.profiles?.full_name}&background=random`} className="w-10 h-10 rounded-full object-cover"/>
                     <div>
                         <p className="text-sm font-bold dark:text-white flex items-center gap-1">
                             {selectedNews.profiles?.full_name}
                             {selectedNews.profiles?.is_reporter && <BadgeCheck size={16} className="text-blue-500 fill-blue-500 text-white" />}
                         </p>
-                        <p className="text-xs text-slate-400">Autor</p>
+                        <p className="text-xs text-slate-400">{formatDate(selectedNews.created_at)}</p>
                     </div>
                </div>
 
-              <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-4 leading-tight">{selectedNews.title}</h2>
-              <div className="prose prose-sm dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+              {/* Título Principal */}
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-6 leading-tight tracking-tight">
+                {selectedNews.title}
+              </h1>
+
+              {/* CUERPO DEL TEXTO (OPTIMIZADO PARA LECTURA MOVIL) */}
+              {/* whitespace-pre-line: Respeta saltos de línea (párrafos) pero colapsa espacios laterales */}
+              {/* break-words: Fuerza a que las palabras largas bajen de línea si no caben */}
+              <div className="text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-300 font-serif whitespace-pre-line break-words text-justify hyphens-auto">
                 {selectedNews.content}
               </div>
             </div>
+
+            {/* Footer de lectura */}
+            <div className="p-6 border-t border-slate-100 dark:border-slate-800 text-center">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Fin del Artículo</p>
+                <div className="flex justify-center mt-2">
+                    <Newspaper size={16} className="text-slate-300"/>
+                </div>
+            </div>
+
           </div>
         </div>
       )}
