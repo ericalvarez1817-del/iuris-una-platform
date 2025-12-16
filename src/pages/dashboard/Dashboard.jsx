@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import useTheme from '../../hooks/useTheme'
-// Importamos los iconos (Agregado 'MessageCircle' para el chat)
+// Importamos los iconos
 import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag, Book, Newspaper, MessageCircle } from 'lucide-react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
+
+// --- NUEVA IMPORTACIÓN: BOTÓN DE NOTIFICACIONES ---
+import NotificationButton from '../../components/ui/NotificationButton'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -13,7 +16,7 @@ export default function Dashboard() {
   const [userEmail, setUserEmail] = useState('')
   const [average, setAverage] = useState('0.00')
   
-  // --- ESTADOS NUEVOS PARA LA AGENDA ---
+  // --- ESTADOS PARA LA AGENDA ---
   const [proximaTarea, setProximaTarea] = useState(null)
   const [loadingAgenda, setLoadingAgenda] = useState(true)
   const [progresoData, setProgresoData] = useState('Cargando...') 
@@ -22,7 +25,7 @@ export default function Dashboard() {
   useEffect(() => {
     getUser()
     getAverage()
-    // --- LLAMADA A LAS NUEVAS FUNCIONES AL CARGAR EL DASHBOARD ---
+    // --- LLAMADA A LAS FUNCIONES AL CARGAR EL DASHBOARD ---
     fetchProximaTarea()
     fetchProgresoData() 
     // -----------------------------------------------------------
@@ -90,7 +93,7 @@ export default function Dashboard() {
     setLoadingAgenda(false)
   }
   
-  // --- FUNCIÓN REAL CORREGIDA: CARGA DATOS DEL TRACKER DE PROGRESO ---
+  // --- FUNCIÓN: CARGA DATOS DEL TRACKER DE PROGRESO ---
   const fetchProgresoData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -110,7 +113,6 @@ export default function Dashboard() {
     }
 
     if (trackerEntries && trackerEntries.length > 0) {
-        // 1. Agrupar por materia y encontrar la bolilla más avanzada
         const progressBySubject = trackerEntries.reduce((acc, entry) => {
             const currentMax = acc[entry.subject_id] || 0;
             acc[entry.subject_id] = Math.max(currentMax, entry.bolilla_number);
@@ -119,7 +121,6 @@ export default function Dashboard() {
 
         const numMaterias = Object.keys(progressBySubject).length;
         
-        // 2. Determinar la bolilla más alta registrada en general
         let maxBolilla = 0;
         let mostAdvancedSubject = 'N/A'; 
 
@@ -146,13 +147,17 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 pb-24 transition-colors duration-300">
       
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Hola, Colega</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 truncate max-w-[200px]">{userEmail}</p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          
+          {/* --- AQUÍ ESTÁ EL NUEVO BOTÓN DE NOTIFICACIONES --- */}
+          <NotificationButton />
+
           {/* BOTÓN TEMA */}
           <button 
             onClick={toggleTheme}
@@ -199,10 +204,9 @@ export default function Dashboard() {
       {/* SECCIÓN HERRAMIENTAS */}
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Herramientas</h3>
 
-      {/* 0. IURIS CHAT (NUEVO) */}
+      {/* 0. IURIS CHAT */}
       <Link to="/chat" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-green-400 group relative overflow-hidden">
-          {/* Efecto de brillo */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-green-50 dark:to-green-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
           <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
@@ -218,7 +222,6 @@ export default function Dashboard() {
       {/* 1. IURIS NEWS */}
       <Link to="/news" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-blue-400 group relative overflow-hidden">
-          {/* Efecto de brillo */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-blue-50 dark:to-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
           <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
@@ -234,7 +237,6 @@ export default function Dashboard() {
       {/* 2. MERCADO UNA */}
       <Link to="/market" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-indigo-400 group relative overflow-hidden">
-          {/* Efecto de brillo */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-indigo-50 dark:to-indigo-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
           <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
@@ -250,7 +252,6 @@ export default function Dashboard() {
       {/* 3. LIBRERÍA DIGITAL */}
       <Link to="/library" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-fuchsia-400 group relative overflow-hidden">
-          {/* Efecto de brillo */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-fuchsia-50 dark:to-fuchsia-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
           <div className="bg-gradient-to-br from-fuchsia-500 to-pink-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
@@ -305,7 +306,6 @@ export default function Dashboard() {
             )}
             </div>
         </Link>
-
 
         {/* Card 2: PROGRESO DE ESTUDIO */}
         <Link to="/tracker" className="block">
