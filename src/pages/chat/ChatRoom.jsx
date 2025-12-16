@@ -19,7 +19,7 @@ export default function ChatRoom() {
   // UX
   const [newMessage, setNewMessage] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [onlineCount, setOnlineCount] = useState(0)
+  const [onlineUsers, setOnlineUsers] = useState(new Set()) // Usamos Set para evitar duplicados
   const messagesEndRef = useRef(null)
 
   // Modales
@@ -32,26 +32,37 @@ export default function ChatRoom() {
       setSession(session)
       if(session && roomId) setupRoom(session.user.id)
     })
+  }, [roomId])
 
-    // --- REALTIME ---
+  // --- LÓGICA DE REALTIME Y PRESENCIA ---
+  useEffect(() => {
+    if (!session?.user?.id || !roomId) return;
+
     const channel = supabase.channel(`room:${roomId}`, {
-        config: { presence: { key: 'user' } }
+        config: { presence: { key: session.user.id } } // La clave es el ID del usuario
     })
 
-    // Escuchar mensajes nuevos (de OTROS)
+    // 1. ESCUCHAR MENSAJES (De otros)
     channel.on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, 
         (payload) => {
-            // Solo añadimos si NO es un mensaje que acabo de enviar yo (para evitar duplicados por la UI optimista)
-            // O si lo envié yo pero estoy en otro dispositivo
-            fetchSingleMessage(payload.new.id)
+            // Solo procesamos el mensaje si NO lo tenemos ya en la lista
+            setMessages(currentMessages => {
+                const exists = currentMessages.find(m => m.id === payload.new.id)
+                if (exists) return currentMessages // Ya lo tengo (probablemente lo envié yo)
+                
+                // Si es nuevo, lo fetcheamos para tener los datos del perfil
+                fetchSingleMessage(payload.new.id)
+                return currentMessages
+            })
         }
     )
 
-    // Presencia
+    // 2. ESCUCHAR PRESENCIA (Usuarios Online)
     channel.on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
-        setOnlineCount(Object.keys(state).length)
+        // state es un objeto { 'user_id': [data], ... }
+        setOnlineUsers(new Set(Object.keys(state)))
     })
 
     channel.subscribe(async (status) => {
@@ -61,7 +72,7 @@ export default function ChatRoom() {
     })
 
     return () => supabase.removeChannel(channel)
-  }, [roomId])
+  }, [roomId, session])
 
   const setupRoom = async (myUserId) => {
       const { data: room } = await supabase.from('chat_rooms').select('*').eq('id', roomId).single()
@@ -99,14 +110,7 @@ export default function ChatRoom() {
       .single()
     
     if(data) {
-        setMessages(prev => {
-            // Evitar duplicados si la UI optimista ya lo agregó (comprobamos por ID temporal o contenido exacto y timestamp reciente)
-            const exists = prev.find(m => m.id === data.id)
-            if (exists) return prev
-            // Eliminar versión optimista si existe (la que tiene id 'temp-')
-            const filtered = prev.filter(m => typeof m.id !== 'string' || !m.id.startsWith('temp-'))
-            return [...filtered, data]
-        })
+        setMessages(prev => [...prev, data])
         scrollToBottom()
     }
   }
@@ -115,28 +119,27 @@ export default function ChatRoom() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100)
   }
 
-  // --- UI OPTIMISTA (ENVÍO INSTANTÁNEO) ---
+  // --- ENVÍO DE MENSAJES (ARREGLADO) ---
   const handleSend = async (file = null, type = 'text') => {
     if (!newMessage.trim() && !file) return
 
-    // 1. CREAR MENSAJE FALSO (OPTIMISTA)
+    // 1. UI OPTIMISTA (Mostrar inmediatamente)
     const tempId = `temp-${Date.now()}`
     const tempMessage = {
         id: tempId,
         room_id: roomId,
         sender_id: session.user.id,
         content: newMessage,
-        media_url: file ? URL.createObjectURL(file) : null, // Preview local instantáneo
+        media_url: file ? URL.createObjectURL(file) : null,
         media_type: type,
         created_at: new Date().toISOString(),
-        profiles: { // Mis datos falsos para que se vea bonito
-            full_name: 'Yo', 
+        profiles: { 
+            full_name: 'Yo', // No necesitamos buscar el nombre, soy yo
             avatar_url: null 
         },
-        is_sending: true // Flag para mostrar spinner o transparencia
+        is_sending: true // Flag para el spinner
     }
 
-    // 2. ACTUALIZAR UI AL INSTANTE
     setMessages(prev => [...prev, tempMessage])
     setNewMessage('')
     scrollToBottom()
@@ -160,18 +163,25 @@ export default function ChatRoom() {
             mediaUrl = data.publicUrl
         }
 
-        // 3. ENVIAR A BD REAL
-        const { error } = await supabase.from('messages').insert({
+        // 2. INSERTAR Y RECIBIR DATOS REALES (select().single())
+        const { data: sentData, error } = await supabase.from('messages').insert({
             room_id: roomId,
             sender_id: session.user.id,
-            content: tempMessage.content, // Usamos el contenido original
+            content: tempMessage.content,
             media_url: mediaUrl,
             media_type: type
         })
+        .select('*, profiles(full_name, avatar_url)') // <-- AQUÍ ESTÁ LA MAGIA
+        .single()
 
         if (error) throw error
 
-        // 4. ACTUALIZAR SALA
+        // 3. REEMPLAZAR MENSAJE TEMPORAL POR EL REAL (Quita el spinner)
+        setMessages(prev => prev.map(msg => 
+            msg.id === tempId ? sentData : msg
+        ))
+
+        // 4. ACTUALIZAR SALA (Último mensaje)
         await supabase.from('chat_rooms').update({
             last_message: type !== 'text' ? `📎 ${type}` : tempMessage.content,
             last_message_time: new Date()
@@ -179,13 +189,12 @@ export default function ChatRoom() {
 
     } catch (error) {
         alert("Error al enviar: " + error.message)
-        // Si falla, borramos el mensaje optimista
+        // Si falla, lo borramos de la vista
         setMessages(prev => prev.filter(m => m.id !== tempId))
     }
     setUploading(false)
   }
 
-  // --- AÑADIR MIEMBRO ---
   const handleSearchUsers = async (term) => {
       setSearchTerm(term)
       if (term.length < 3) return setSearchResults([])
@@ -212,14 +221,16 @@ export default function ChatRoom() {
       {/* HEADER */}
       <div className="bg-white dark:bg-slate-900 p-3 shadow-sm flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 z-10">
         <button onClick={() => navigate('/chat')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><ArrowLeft size={20} className="dark:text-white"/></button>
+        
         <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-slate-800 flex items-center justify-center text-indigo-600 font-bold overflow-hidden border border-slate-200 dark:border-slate-700">
              {roomDetails?.avatar ? <img src={roomDetails.avatar} className="w-full h-full object-cover"/> : (roomDetails?.name?.charAt(0) || '#')}
         </div>
+        
         <div className="flex-1">
             <h2 className="font-bold text-slate-800 dark:text-white text-sm leading-tight line-clamp-1">{roomDetails?.name || 'Cargando...'}</h2>
-            <p className="text-[10px] font-bold flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${onlineCount > 1 ? 'bg-green-500 animate-pulse' : 'bg-slate-400'}`}></span>
-                {onlineCount > 1 ? `${onlineCount} en línea` : 'Desconectado'}
+            <p className="text-[10px] font-bold flex items-center gap-1 text-slate-500">
+                <span className={`w-2 h-2 rounded-full ${onlineUsers.size > 1 ? 'bg-green-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                {onlineUsers.size > 0 ? (onlineUsers.size === 1 ? 'Solo tú' : `${onlineUsers.size} en línea`) : 'Desconectado'}
             </p>
         </div>
         {roomDetails?.is_group && (
@@ -231,12 +242,12 @@ export default function ChatRoom() {
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5] dark:bg-slate-950/50">
         {messages.map((msg, index) => {
             const isMe = msg.sender_id === session?.user?.id
-            // Si tiene is_sending, es un mensaje "optimista"
+            // Un mensaje es "optimista" si tiene el flag is_sending
             const isOptimistic = msg.is_sending 
             
             return (
                 <div key={index} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
-                    <div className={`max-w-[80%] sm:max-w-[60%] rounded-2xl p-2.5 shadow-sm relative ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none'} ${isOptimistic ? 'opacity-70' : 'opacity-100'}`}>
+                    <div className={`max-w-[80%] sm:max-w-[60%] rounded-2xl p-2.5 shadow-sm relative ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none'} ${isOptimistic ? 'opacity-80' : 'opacity-100'}`}>
                         
                         {!isMe && roomDetails?.is_group && (
                             <p className="text-[10px] font-bold text-orange-500 mb-1">{msg.profiles?.full_name}</p>
@@ -255,8 +266,8 @@ export default function ChatRoom() {
                              <p className={`text-[9px] ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                                 {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '...'}
                             </p>
-                            {/* Icono de reloj si está enviando */}
-                            {isOptimistic && <Loader2 size={10} className="animate-spin text-white"/>}
+                            {/* EL RELOJITO (Solo si es optimista) */}
+                            {isOptimistic && <Loader2 size={10} className="animate-spin text-white/70"/>}
                         </div>
                     </div>
                 </div>
