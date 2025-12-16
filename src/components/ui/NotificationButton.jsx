@@ -39,7 +39,7 @@ export default function NotificationButton() {
 
       if (error) throw error
 
-      alert("¡Sincronización Exitosa! Ahora sí estás en la base de datos.")
+      alert("¡Sincronización Exitosa!")
       setPermissionState('granted')
 
     } catch (error) {
@@ -62,7 +62,7 @@ export default function NotificationButton() {
       {loading ? <Loader2 size={16} className="animate-spin"/> : (
         permissionState === 'granted' ? <BellRing size={16}/> : <Bell size={16}/>
       )}
-      {permissionState === 'granted' ? 'Notificaciones (Toca para Sync)' : 'Activar Alertas'}
+      {permissionState === 'granted' ? 'Notificaciones ' : 'Activar Alertas'}
     </button>
   )
 }
