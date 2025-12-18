@@ -2,8 +2,9 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.0.0"
-// CAMBIO IMPORTANTE: Usamos 'npm:' para máxima compatibilidad
-import webpush from "npm:web-push@3.6.3"
+
+// --- CAMBIO CLAVE: Usamos esm.sh que es 100% compatible con Supabase ---
+import webpush from "https://esm.sh/web-push@3.6.3"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,56 +12,48 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Manejo de CORS
+  // LOG DE VIDA
+  console.log("🔥 EL ROBOT HA DESPERTADO (Versión ESM)")
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
     const payload = await req.json()
-    const record = payload.record
+    // console.log("📦 Payload recibido:", JSON.stringify(payload)) 
 
-    if (!record || !record.room_id) {
-      return new Response(JSON.stringify({ message: 'No record' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
+    const record = payload.record
+    
+    if (!record) {
+      console.log("❌ No record found in payload")
+      return new Response("No record", { headers: corsHeaders })
     }
 
     // Inicializar Supabase
     // @ts-ignore
     const supabase = createClient(
+      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
+      // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Configurar WebPush con las claves secretas
     // @ts-ignore
-    const vapidPriv = Deno.env.get('VAPID_PRIVATE_KEY') ?? ''
+    const vapidPriv = Deno.env.get('VAPID_PRIVATE_KEY')
     // @ts-ignore
-    const vapidPub = Deno.env.get('VAPID_PUBLIC_KEY') ?? ''
+    const vapidPub = Deno.env.get('VAPID_PUBLIC_KEY')
 
-    // Validación básica de claves para evitar crashes silenciosos
     if (!vapidPriv || !vapidPub) {
-      throw new Error("Faltan las claves VAPID en los Secretos de Supabase")
+      console.error("❌ Faltan las claves VAPID")
+      return new Response("Keys missing", { headers: corsHeaders })
     }
 
-    webpush.setVapidDetails(
-      'mailto:iurisuna.help@gmail.com',
-      vapidPub,
-      vapidPriv
-    )
+    // @ts-ignore
+    webpush.setVapidDetails('mailto:test@test.com', vapidPub, vapidPriv)
 
-    // 1. Obtener nombre del remitente
-    const { data: sender } = await supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', record.sender_id)
-      .single()
-
-    const senderName = sender?.full_name || 'Alguien'
-
-    // 2. Buscar participantes (excluyendo al remitente)
+    // 2. BUSCAR AL USUARIO DESTINO
+    // @ts-ignore
     const { data: participants } = await supabase
       .from('chat_participants')
       .select('user_id')
@@ -68,67 +61,57 @@ serve(async (req) => {
       .neq('user_id', record.sender_id)
 
     if (!participants || participants.length === 0) {
-      console.log("No hay participantes a quien notificar")
-      return new Response(JSON.stringify({ message: 'No participants' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
+      console.log("⚠️ Nadie a quien notificar.")
+      return new Response("Alone", { headers: corsHeaders })
     }
 
-    const userIds = participants.map((p: any) => p.user_id)
+    // @ts-ignore
+    const userIds = participants.map(p => p.user_id)
 
-    // 3. Buscar tokens de esos usuarios
-    const { data: subscriptions } = await supabase
+    // 3. BUSCAR SI TIENEN NOTIFICACIONES ACTIVAS
+    // @ts-ignore
+    const { data: subs } = await supabase
       .from('push_subscriptions')
       .select('*')
       .in('user_id', userIds)
 
-    if (!subscriptions || subscriptions.length === 0) {
-      console.log("Los participantes no tienen notificaciones activas")
-      return new Response(JSON.stringify({ message: 'No subscriptions' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
+    if (!subs || subs.length === 0) {
+      console.log("🔕 Sin notificaciones activas.")
+      return new Response("No subs", { headers: corsHeaders })
     }
 
-    console.log(`Enviando notificación a ${subscriptions.length} dispositivos...`)
+    console.log(`🔔 Enviando a ${subs.length} dispositivos...`)
 
-    // 4. Enviar
+    // 4. ENVIAR
     const notificationPayload = JSON.stringify({
-      title: `Mensaje de ${senderName}`,
-      body: record.media_type !== 'text' ? `📎 Envió un archivo` : record.content,
+      title: 'Nuevo Mensaje',
+      body: record.content || 'Archivo adjunto',
       url: `/chat/${record.room_id}`
     })
 
-    const promises = subscriptions.map((sub: any) => {
-      const pushConfig = {
-        endpoint: sub.endpoint,
-        keys: { p256dh: sub.p256dh, auth: sub.auth }
+    for (const sub of subs) {
+      try {
+        // @ts-ignore
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth }
+        }, notificationPayload)
+      } catch (err) {
+        console.error(`❌ Error push:`, err)
+        // @ts-ignore
+        if (err.statusCode === 410 || err.statusCode === 404) {
+           await supabase.from('push_subscriptions').delete().eq('id', sub.id)
+        }
       }
-      return webpush.sendNotification(pushConfig, notificationPayload)
-        .catch((err: any) => {
-          // Si el error es 404/410, el token ya no sirve (usuario borró caché)
-          if (err.statusCode === 404 || err.statusCode === 410) {
-            console.log(`Token muerto ${sub.id}, eliminando...`)
-            supabase.from('push_subscriptions').delete().eq('id', sub.id).then()
-          } else {
-            console.error('Error enviando push individual:', err)
-          }
-        })
-    })
+    }
 
-    await Promise.all(promises)
-
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    })
+    return new Response("Done", { headers: corsHeaders })
 
   } catch (error: any) {
-    console.error("CRITICAL ERROR:", error.message)
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+    console.error("💀 ERROR FATAL:", error.message)
+    return new Response(JSON.stringify({ error: error.message }), { 
+      headers: corsHeaders, 
+      status: 500 
     })
   }
 })
