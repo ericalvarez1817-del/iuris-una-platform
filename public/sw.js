@@ -1,7 +1,17 @@
 // public/sw.js
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 
+// -------------------------------------------------------------------------
+// ESTAS 2 LÍNEAS SON LAS QUE ARREGLAN EL ERROR DE "UNABLE TO INJECT MANIFEST"
+// -------------------------------------------------------------------------
+cleanupOutdatedCaches()
+precacheAndRoute(self.__WB_MANIFEST)
+
+// -------------------------------------------------------------------------
+// LÓGICA DE PUSH NOTIFICATIONS (TU CÓDIGO ANTERIOR)
+// -------------------------------------------------------------------------
 self.addEventListener('push', function(event) {
-  console.log('¡Push recibido!'); // Esto saldrá en la consola
+  console.log('¡Push recibido!');
 
   let data = { title: 'Nuevo Mensaje', body: 'Revisa el chat' };
   
@@ -16,8 +26,8 @@ self.addEventListener('push', function(event) {
 
   const options = {
     body: data.body || 'Tienes una novedad',
-    icon: '/pwa-192x192.png', // Si no tienes este icono, no saldrá imagen, pero sonará
-    vibrate: [200, 100, 200], // Vibración: bzz-pausa-bzz
+    icon: '/pwa-192x192.png', 
+    vibrate: [200, 100, 200],
     data: {
       url: data.url || '/'
     }
@@ -28,7 +38,6 @@ self.addEventListener('push', function(event) {
   );
 });
 
-// Cuando le haces clic a la notificación
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   event.waitUntil(
