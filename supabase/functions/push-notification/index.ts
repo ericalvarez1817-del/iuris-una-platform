@@ -3,7 +3,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.0.0"
 
-// --- MANTENEMOS LA VERSIÓN SOLIDA DE NPM ---
+// --- MANTENEMOS LA VERSIÓN SÓLIDA DE NPM (NO TOCAR) ---
 import webpush from "npm:web-push@3.6.3"
 
 const corsHeaders = {
@@ -13,13 +13,30 @@ const corsHeaders = {
 
 serve(async (req) => {
   // LOG DE VIDA
-  console.log("🔥 ROBOT V4 (PROFILE MODE) INICIADO")
+  console.log("🔥 ROBOT V5 (SECURE MODE) INICIADO")
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // ============================================================
+    // 🛡️ NUEVA CAPA DE SEGURIDAD (EL PORTERO)
+    // ============================================================
+    const secretHeader = req.headers.get('x-webhook-secret')
+    // @ts-ignore
+    const correctSecret = Deno.env.get('WEBHOOK_SECRET')
+
+    // Si no hay secreto configurado o no coincide, RECHAZAR.
+    if (!correctSecret || secretHeader !== correctSecret) {
+      console.warn("⛔ ALERTA: Intento de acceso sin contraseña correcta.")
+      return new Response("Unauthorized: Missing or wrong secret", { 
+        status: 401, 
+        headers: corsHeaders 
+      })
+    }
+    // ============================================================
+
     const payload = await req.json()
     const record = payload.record
 
@@ -57,8 +74,7 @@ serve(async (req) => {
       throw err
     }
 
-    // --- NUEVO: 1. OBTENER DATOS DEL REMITENTE (Nombre y Foto) ---
-    // Buscamos quién envió el mensaje para poner su nombre y cara en la notificación
+    // 1. OBTENER DATOS DEL REMITENTE (Tu lógica V4 intacta)
     // @ts-ignore
     const { data: sender } = await supabase
       .from('profiles')
@@ -67,10 +83,9 @@ serve(async (req) => {
       .single()
 
     const senderName = sender?.full_name || 'Nuevo Mensaje'
-    // Si no tiene foto, usa el icono de la app por defecto
     const senderIcon = sender?.avatar_url || '/pwa-192x192.png'
 
-    // 2. BUSCAR DESTINATARIOS (Excluyendo al remitente)
+    // 2. BUSCAR DESTINATARIOS
     // @ts-ignore
     const { data: participants } = await supabase
       .from('chat_participants')
@@ -98,15 +113,15 @@ serve(async (req) => {
       return new Response("No subs", { headers: corsHeaders })
     }
 
-    console.log(`🚀 Enviando mensaje de: ${senderName} a ${subs.length} dispositivos`)
+    console.log(`🚀 Enviando mensaje de: ${senderName} a ${subs.length} dispositivos (AUTH OK)`)
 
-    // 4. ENVIAR NOTIFICACIÓN CON DATOS DE PERFIL
+    // 4. ENVIAR NOTIFICACIÓN (Tu lógica V4 intacta)
     const notificationPayload = JSON.stringify({
-      title: senderName, // TÍTULO = NOMBRE REAL
+      title: senderName,
       body: record.content || '📷 Archivo adjunto',
       url: `/chat/${record.room_id}`,
-      icon: senderIcon,   // ICONO = FOTO DE PERFIL
-      badge: '/pwa-192x192.png' // Icono pequeño monocromático (opcional)
+      icon: senderIcon,
+      badge: '/pwa-192x192.png'
     })
 
     const promises = subs.map((sub: any) => {
@@ -116,7 +131,6 @@ serve(async (req) => {
       }, notificationPayload)
       .then(() => console.log(`✅ Enviado a ID: ${sub.id}`))
       .catch((err: any) => {
-        // Si el error es 410 (Gone) o 404, el token ya no sirve
         if (err.statusCode === 410 || err.statusCode === 404) {
           console.log(`🗑️ Borrando token muerto: ${sub.id}`)
           supabase.from('push_subscriptions').delete().eq('id', sub.id).then()
