@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-// Importamos todos los iconos necesarios
+// 1. IMPORTAMOS CAPACITOR PARA DETECTAR SI ES APP O WEB
+import { Capacitor } from '@capacitor/core'; 
+
 import { 
     Loader2, Sun, Moon, Mail, Key, LogIn, User, AlertCircle, 
     CheckCircle, ArrowLeft 
@@ -58,7 +60,17 @@ export default function Login() {
       } 
       else if (view === 'signup') {
         // --- CREAR CUENTA (ENVÍO DE CORREO DE CONFIRMACIÓN) ---
-        const { error } = await supabase.auth.signUp({ email, password });
+        // Ajustamos la redirección del correo de confirmación
+        const redirectUrl = Capacitor.isNativePlatform() 
+            ? 'com.iurisuna.app://login-callback' // Deep link para App
+            : `${window.location.origin}`;         // URL normal para Web
+
+        const { error } = await supabase.auth.signUp({ 
+            email, 
+            password,
+            options: { emailRedirectTo: redirectUrl }
+        });
+
         if (error) throw error;
         setSuccessMsg("¡Cuenta creada! Revisa tu correo (y Spam) para confirmar tu dirección antes de iniciar sesión.");
         setView('login');
@@ -82,9 +94,13 @@ export default function Login() {
     setSuccessMsg(null);
 
     try {
+        // Lógica inteligente para redirección
+        const redirectUrl = Capacitor.isNativePlatform() 
+            ? 'com.iurisuna.app://reset-callback' // Deep link para App
+            : `${window.location.origin}`;        // URL normal para Web
+
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            // El usuario será redirigido a la URL principal al hacer click en el email
-            redirectTo: window.location.origin
+            redirectTo: redirectUrl
         });
 
         if (error) throw error;
@@ -97,44 +113,54 @@ export default function Login() {
     }
   };
 
-  // --- FUNCIÓN DE LOGIN CON GOOGLE (NUEVA) ---
+  // --- FUNCIÓN DE LOGIN CON GOOGLE (CORREGIDA PARA APP) ---
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google', // <-- Especificamos el proveedor
-        options: {
-            // Redirige al dashboard después del login exitoso con Google
-            redirectTo: `${window.location.origin}/dashboard`, 
-        },
-    });
 
-    if (error) {
+    try {
+        // 🧠 CEREBRO DEL SISTEMA HÍBRIDO:
+        // Si es App (Android/iOS) -> Usa el enlace profundo 'com.iurisuna.app://'
+        // Si es Web -> Usa la URL del navegador 'https://...'
+        const redirectUrl = Capacitor.isNativePlatform() 
+            ? 'com.iurisuna.app://google-auth' 
+            : `${window.location.origin}/dashboard`;
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google', 
+            options: {
+                redirectTo: redirectUrl,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                },
+            },
+        });
+
+        if (error) throw error;
+    } catch (error) {
         setError(error.message);
         setLoading(false);
     }
-    // Si es exitoso, Supabase se encarga de redirigir a Google y luego al dashboard
   };
 
   // --- VISTAS DEL FORMULARIO ---
   const renderForm = () => {
-    // Si la URL contiene un token de recuperación de contraseña, el usuario puede cambiarla directamente
+    // Si la URL contiene un token de recuperación de contraseña
     if (window.location.hash.includes('access_token')) {
-        // Aunque no es la vista 'login', si hay token, mostramos el formulario de cambio de clave
         const handleNewPassword = async (e) => {
             e.preventDefault();
             setLoading(true);
             setError(null);
             
-            // Usamos la función de Supabase para actualizar la contraseña
             const { error: updateError } = await supabase.auth.updateUser({ password });
             
             if (updateError) {
                 setError(updateError.message);
             } else {
                 setSuccessMsg("¡Contraseña actualizada con éxito! Ya puedes iniciar sesión.");
-                setPassword(''); // Limpia el campo
-                navigate(window.location.origin); // Limpia el hash de la URL
+                setPassword(''); 
+                navigate('/dashboard'); // Redirigir directo
             }
             setLoading(false);
         };
