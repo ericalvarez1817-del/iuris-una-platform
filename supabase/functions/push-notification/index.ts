@@ -2,8 +2,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.0.0"
-
-// --- MANTENEMOS LA VERSIÓN SÓLIDA DE NPM (NO TOCAR) ---
 import webpush from "npm:web-push@3.6.3"
 
 const corsHeaders = {
@@ -12,8 +10,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // LOG DE VIDA
-  console.log("🔥 ROBOT V5 (SECURE MODE) INICIADO")
+  console.log("🔥 ROBOT V6 (NEWS + CHAT SECURE) INICIADO")
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -21,27 +18,24 @@ serve(async (req) => {
 
   try {
     // ============================================================
-    // 🛡️ NUEVA CAPA DE SEGURIDAD (EL PORTERO)
+    // 🛡️ 1. SEGURIDAD (EL PORTERO)
     // ============================================================
     const secretHeader = req.headers.get('x-webhook-secret')
     // @ts-ignore
     const correctSecret = Deno.env.get('WEBHOOK_SECRET')
 
-    // Si no hay secreto configurado o no coincide, RECHAZAR.
     if (!correctSecret || secretHeader !== correctSecret) {
       console.warn("⛔ ALERTA: Intento de acceso sin contraseña correcta.")
-      return new Response("Unauthorized: Missing or wrong secret", { 
-        status: 401, 
-        headers: corsHeaders 
-      })
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders })
     }
-    // ============================================================
 
+    // ============================================================
+    // 📦 2. PREPARAR DATOS
+    // ============================================================
     const payload = await req.json()
-    const record = payload.record
+    const { table, record } = payload // Importante: Saber de qué tabla viene
 
     if (!record) {
-      console.log("❌ Payload vacío o sin record")
       return new Response("No record", { headers: corsHeaders })
     }
 
@@ -57,92 +51,118 @@ serve(async (req) => {
     // @ts-ignore
     const vapidPub = Deno.env.get('VAPID_PUBLIC_KEY')
 
-    if (!vapidPriv || !vapidPub) {
-      console.error("❌ ERROR CRÍTICO: Faltan claves VAPID en Secrets")
-      throw new Error("Missing VAPID Keys")
-    }
+    webpush.setVapidDetails('mailto:iurisuna.help@gmail.com', vapidPub, vapidPriv)
 
-    // Configurar WebPush
-    try {
-      webpush.setVapidDetails(
-        'mailto:iurisuna.help@gmail.com',
-        vapidPub,
-        vapidPriv
-      )
-    } catch (err) {
-      console.error("❌ Error configurando VAPID:", err)
-      throw err
-    }
 
-    // 1. OBTENER DATOS DEL REMITENTE (Tu lógica V4 intacta)
-    // @ts-ignore
-    const { data: sender } = await supabase
-      .from('profiles')
-      .select('full_name, avatar_url')
-      .eq('id', record.sender_id)
-      .single()
+    // ============================================================
+    // 📰 3. LÓGICA DE NOTICIAS (TABLA 'news')
+    // ============================================================
+    if (table === 'news') {
+      console.log(`📢 PROCESANDO NOTICIA: ${record.title}`)
 
-    const senderName = sender?.full_name || 'Nuevo Mensaje'
-    const senderIcon = sender?.avatar_url || '/pwa-192x192.png'
+      // A. Obtener TODOS los dispositivos
+      // @ts-ignore
+      const { data: subs } = await supabase.from('push_subscriptions').select('*')
 
-    // 2. BUSCAR DESTINATARIOS
-    // @ts-ignore
-    const { data: participants } = await supabase
-      .from('chat_participants')
-      .select('user_id')
-      .eq('room_id', record.room_id)
-      .neq('user_id', record.sender_id)
+      if (!subs || subs.length === 0) return new Response("No subs", { headers: corsHeaders })
 
-    if (!participants || participants.length === 0) {
-      console.log("⚠️ Nadie más en la sala.")
-      return new Response("Alone", { headers: corsHeaders })
-    }
-
-    // @ts-ignore
-    const userIds = participants.map(p => p.user_id)
-
-    // 3. BUSCAR TOKENS
-    // @ts-ignore
-    const { data: subs } = await supabase
-      .from('push_subscriptions')
-      .select('*')
-      .in('user_id', userIds)
-
-    if (!subs || subs.length === 0) {
-      console.log("🔕 Los participantes no tienen alertas activas.")
-      return new Response("No subs", { headers: corsHeaders })
-    }
-
-    console.log(`🚀 Enviando mensaje de: ${senderName} a ${subs.length} dispositivos (AUTH OK)`)
-
-    // 4. ENVIAR NOTIFICACIÓN (Tu lógica V4 intacta)
-    const notificationPayload = JSON.stringify({
-      title: senderName,
-      body: record.content || '📷 Archivo adjunto',
-      url: `/chat/${record.room_id}`,
-      icon: senderIcon,
-      badge: '/pwa-192x192.png'
-    })
-
-    const promises = subs.map((sub: any) => {
-      return webpush.sendNotification({
-        endpoint: sub.endpoint,
-        keys: { p256dh: sub.p256dh, auth: sub.auth }
-      }, notificationPayload)
-      .then(() => console.log(`✅ Enviado a ID: ${sub.id}`))
-      .catch((err: any) => {
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          console.log(`🗑️ Borrando token muerto: ${sub.id}`)
-          supabase.from('push_subscriptions').delete().eq('id', sub.id).then()
-        } else {
-          console.error(`⚠️ Falló envío a ID: ${sub.id}`, err.statusCode)
-        }
+      // B. Preparar Payload "PRIORITARIO" (Foto Grande + Persistente)
+      const newsPayload = JSON.stringify({
+        title: `🚨 ${record.title}`, // Emoji de alerta
+        body: record.content.substring(0, 100) + '...', // Breve resumen
+        url: '/news', // Te lleva a la sección de noticias
+        icon: '/pwa-192x192.png',
+        image: record.image_url || null, // FOTO GRANDE (Si la noticia tiene foto)
+        tag: 'news-alert',
+        priority: 'high' // Señal para el Frontend de que es urgente
       })
-    })
 
-    await Promise.all(promises)
+      console.log(`🚀 Enviando noticia a ${subs.length} personas...`)
 
-    return new Response("Done", { headers: corsHeaders })
+      const promises = subs.map((sub: any) => 
+        webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth }
+        }, newsPayload)
+        .catch((e: any) => {
+          if (e.statusCode === 410 || e.statusCode === 404) {
+             supabase.from('push_subscriptions').delete().eq('id', sub.id).then()
+          }
+        })
+      )
+      
+      await Promise.all(promises)
+      return new Response("News Sent", { headers: corsHeaders })
+    }
+
+
+    // ============================================================
+    // 💬 4. LÓGICA DE CHAT (TABLA 'messages')
+    // ============================================================
+    // Si la tabla es messages O tiene room_id, asumimos que es chat
+    if (table === 'messages' || record.room_id) {
+      
+      // A. Datos del Remitente
+      // @ts-ignore
+      const { data: sender } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', record.sender_id)
+        .single()
+
+      const senderName = sender?.full_name || 'Nuevo Mensaje'
+      const senderIcon = sender?.avatar_url || '/pwa-192x192.png'
+
+      // B. Buscar Participantes
+      // @ts-ignore
+      const { data: participants } = await supabase
+        .from('chat_participants')
+        .select('user_id')
+        .eq('room_id', record.room_id)
+        .neq('user_id', record.sender_id)
+
+      if (!participants?.length) return new Response("Alone", { headers: corsHeaders })
+      // @ts-ignore
+      const userIds = participants.map(p => p.user_id)
+
+      // C. Buscar Tokens
+      // @ts-ignore
+      const { data: subs } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .in('user_id', userIds)
+
+      if (!subs?.length) return new Response("No subs", { headers: corsHeaders })
+
+      // D. Enviar Notificación de Chat
+      const chatPayload = JSON.stringify({
+        title: senderName,
+        body: record.content || '📷 Archivo adjunto',
+        url: `/chat/${record.room_id}`,
+        icon: senderIcon,
+        badge: '/pwa-192x192.png',
+        tag: `chat-${record.room_id}`
+      })
+
+      console.log(`🚀 Chat de ${senderName} enviado a ${subs.length} dispositivos`)
+
+      const promises = subs.map((sub: any) => {
+        return webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth }
+        }, chatPayload)
+        .catch((err: any) => {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            supabase.from('push_subscriptions').delete().eq('id', sub.id).then()
+          }
+        })
+      })
+
+      await Promise.all(promises)
+      return new Response("Chat Sent", { headers: corsHeaders })
+    }
+
+    return new Response("Ignored table", { headers: corsHeaders })
 
   } catch (error: any) {
     console.error("💀 ERROR FATAL:", error.message)
