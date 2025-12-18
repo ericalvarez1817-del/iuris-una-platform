@@ -1,4 +1,9 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+
+// 1. IMPORTACIONES PARA EL LOGIN MÓVIL
+import { App as CapApp } from '@capacitor/app'
+import { supabase } from './lib/supabase'
 
 // COMPONENTE DE SEGURIDAD (El Guardia)
 import ProtectedRoute from './components/ProtectedRoute'
@@ -33,6 +38,47 @@ import ChatRoom from './pages/chat/ChatRoom'
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
 
 function App() {
+
+  // ============================================================
+  // 🥅 EL PORTERO: ESCUCHA EL RETORNO DE GOOGLE (ANDROID/iOS)
+  // ============================================================
+  useEffect(() => {
+    // Escuchamos el evento 'appUrlOpen' que lanza Capacitor cuando una app externa nos abre
+    CapApp.addListener('appUrlOpen', async ({ url }) => {
+      console.log("🔗 Enlace profundo recibido en App.jsx:", url);
+      
+      // La URL llega tipo: com.iurisuna.app://google-auth#access_token=...&refresh_token=...
+      
+      // Intentamos obtener la parte de los parámetros (después del # o ?)
+      const slug = url.split('.app').pop(); 
+      
+      if (slug) {
+        // Buscamos los tokens en la URL
+        const params = new URLSearchParams(slug.includes('#') ? slug.split('#')[1] : slug.split('?')[1]);
+        
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        
+        if (accessToken && refreshToken) {
+           console.log("✅ Tokens encontrados. Iniciando sesión en Supabase...");
+           
+           // Inyectamos la sesión manualmente en Supabase
+           const { error } = await supabase.auth.setSession({
+             access_token: accessToken,
+             refresh_token: refreshToken,
+           });
+
+           if (error) {
+             console.error("❌ Error al establecer sesión:", error);
+           } else {
+             console.log("🎉 Sesión establecida correctamente. El usuario debería entrar.");
+           }
+        }
+      }
+    });
+  }, []);
+  // ============================================================
+
   return (
     <BrowserRouter>
       <Routes>
