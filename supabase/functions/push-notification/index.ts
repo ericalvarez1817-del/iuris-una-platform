@@ -3,7 +3,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.0.0"
 
-// --- SOLUCIÓN FINAL: Usamos 'npm:' para evitar el error de Object prototype ---
+// --- MANTENEMOS LA VERSIÓN SOLIDA DE NPM ---
 import webpush from "npm:web-push@3.6.3"
 
 const corsHeaders = {
@@ -13,7 +13,7 @@ const corsHeaders = {
 
 serve(async (req) => {
   // LOG DE VIDA
-  console.log("🔥 ROBOT V3 (NPM MODE) INICIADO")
+  console.log("🔥 ROBOT V4 (PROFILE MODE) INICIADO")
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -57,7 +57,20 @@ serve(async (req) => {
       throw err
     }
 
-    // 2. BUSCAR AL USUARIO DESTINO (Excluyendo al remitente)
+    // --- NUEVO: 1. OBTENER DATOS DEL REMITENTE (Nombre y Foto) ---
+    // Buscamos quién envió el mensaje para poner su nombre y cara en la notificación
+    // @ts-ignore
+    const { data: sender } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', record.sender_id)
+      .single()
+
+    const senderName = sender?.full_name || 'Nuevo Mensaje'
+    // Si no tiene foto, usa el icono de la app por defecto
+    const senderIcon = sender?.avatar_url || '/pwa-192x192.png'
+
+    // 2. BUSCAR DESTINATARIOS (Excluyendo al remitente)
     // @ts-ignore
     const { data: participants } = await supabase
       .from('chat_participants')
@@ -85,14 +98,15 @@ serve(async (req) => {
       return new Response("No subs", { headers: corsHeaders })
     }
 
-    console.log(`🚀 Enviando a ${subs.length} dispositivos...`)
+    console.log(`🚀 Enviando mensaje de: ${senderName} a ${subs.length} dispositivos`)
 
-    // 4. ENVIAR NOTIFICACIÓN
+    // 4. ENVIAR NOTIFICACIÓN CON DATOS DE PERFIL
     const notificationPayload = JSON.stringify({
-      title: 'Nuevo Mensaje',
-      body: record.content || 'Archivo adjunto',
+      title: senderName, // TÍTULO = NOMBRE REAL
+      body: record.content || '📷 Archivo adjunto',
       url: `/chat/${record.room_id}`,
-      icon: '/pwa-192x192.png'
+      icon: senderIcon,   // ICONO = FOTO DE PERFIL
+      badge: '/pwa-192x192.png' // Icono pequeño monocromático (opcional)
     })
 
     const promises = subs.map((sub: any) => {
@@ -102,11 +116,12 @@ serve(async (req) => {
       }, notificationPayload)
       .then(() => console.log(`✅ Enviado a ID: ${sub.id}`))
       .catch((err: any) => {
-        console.error(`⚠️ Falló envío a ID: ${sub.id}`, err.statusCode)
         // Si el error es 410 (Gone) o 404, el token ya no sirve
         if (err.statusCode === 410 || err.statusCode === 404) {
           console.log(`🗑️ Borrando token muerto: ${sub.id}`)
           supabase.from('push_subscriptions').delete().eq('id', sub.id).then()
+        } else {
+          console.error(`⚠️ Falló envío a ID: ${sub.id}`, err.statusCode)
         }
       })
     })
