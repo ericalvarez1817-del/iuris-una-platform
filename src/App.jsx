@@ -1,11 +1,11 @@
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom' // AÑADIDO: useNavigate
+import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 
-// 1. IMPORTACIONES PARA EL LOGIN MÓVIL
+// 1. IMPORTACIONES
 import { App as CapApp } from '@capacitor/app'
 import { supabase } from './lib/supabase'
 
-// COMPONENTE DE SEGURIDAD (El Guardia)
+// COMPONENTE DE SEGURIDAD
 import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/layout/AppLayout'
 
@@ -28,15 +28,40 @@ import ChatRoom from './pages/chat/ChatRoom'
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
 
 // ============================================================
-// COMPONENTE INTERNO: Maneja las rutas y la lógica del Login
+// COMPONENTE INTERNO: Lógica reactiva + Debugger
 // ============================================================
 function AppRoutes() {
-  const navigate = useNavigate(); // AHORA SÍ podemos usar esto gracias a la reestructuración
+  const navigate = useNavigate();
+  
+  // ESTADO PARA DEBUG (Para ver qué pasa si se congela)
+  const [logs, setLogs] = useState(["Iniciando App..."]);
 
+  const addLog = (msg) => {
+    console.log(msg);
+    setLogs(prev => [...prev.slice(-4), msg]); // Guarda los últimos 5 mensajes
+  };
+
+  // 1. ESCUCHA AUTORITARIA: Supabase nos dice cuándo movernos
   useEffect(() => {
-    // Escuchamos el evento 'appUrlOpen'
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      addLog(`🔐 Auth Event: ${event}`);
+      
+      if (event === 'SIGNED_IN' && session) {
+        addLog("✅ SIGNED_IN confirmado. Navegando...");
+        navigate('/dashboard', { replace: true });
+      }
+      if (event === 'SIGNED_OUT') {
+        navigate('/');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  // 2. ESCUCHA DEL DEEP LINK: Solo inyecta datos, NO navega
+  useEffect(() => {
     CapApp.addListener('appUrlOpen', async ({ url }) => {
-      console.log("🔗 Enlace profundo recibido:", url);
+      addLog(`🔗 URL: ${url.slice(0, 20)}...`);
       
       try {
         const cleanUrl = url.replace('com.iurisuna.app://', 'http://dummy/');
@@ -48,69 +73,63 @@ function AppRoutes() {
         const refreshToken = params.get('refresh_token');
         
         if (accessToken && refreshToken) {
-           console.log("✅ Tokens detectados. Guardando sesión...");
+           addLog("🔑 Tokens OK. Inyectando...");
            
            const { error } = await supabase.auth.setSession({
              access_token: accessToken,
              refresh_token: refreshToken,
            });
 
-           if (!error) {
-             console.log("🎉 Sesión lista. Navegando suavemente...");
-             // USAMOS NAVIGATE EN LUGAR DE RELOAD (Evita pantalla blanca)
-             navigate('/dashboard');
-           }
+           if (error) addLog(`❌ Error: ${error.message}`);
+           else addLog("🎉 Inyección OK. Esperando evento...");
+        } else {
+            addLog("⚠️ Sin tokens en URL");
         }
       } catch (e) {
-          console.error("Error procesando URL:", e);
+          addLog(`💀 Error Fatal: ${e.message}`);
       }
     });
-  }, [navigate]);
+  }, []);
 
   return (
+    <>
+      {/* --- DEBUGGER EN PANTALLA (Solo visible si hay problemas) --- */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: 'rgba(0,0,0,0.85)', color: '#00ff00',
+        fontSize: '11px', padding: '8px', zIndex: 99999,
+        pointerEvents: 'none', fontFamily: 'monospace'
+      }}>
+        {logs.map((l, i) => <div key={i}>{l}</div>)}
+      </div>
+
       <Routes>
-        {/* RUTA PÚBLICA */}
         <Route path="/" element={<Login />} />
 
-        {/* 🔒 RUTAS PROTEGIDAS */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/agenda" element={<Agenda />} /> 
-            
-            {/* Admin */}
             <Route path="/admin" element={<AdminPanel />} />
-            
-            {/* Herramientas */}
             <Route path="/tools" element={<Calculator />} />
             <Route path="/gpa" element={<GpaCalculator />} />
             <Route path="/notes" element={<NoteGenerator />} />
             <Route path="/lexicon" element={<Lexicon />} />
             <Route path="/market" element={<Marketplace />} />
-
-            {/* Librería */}
             <Route path="/library" element={<Library />} />
-
-            {/* Noticias */}
             <Route path="/news" element={<NewsFeed />} />
-            
-            {/* Chat */}
             <Route path="/chat" element={<ChatList />} />
             <Route path="/chat/:roomId" element={<ChatRoom />} />
-
-            {/* Leyes */}
             <Route path="/laws" element={<LawsSearch />} />
             <Route path="/laws/:id" element={<LawDetails />} />
           </Route>
         </Route>
       </Routes>
+    </>
   );
 }
 
-// ============================================================
-// APP PRINCIPAL: Provee el Router para que AppRoutes funcione
-// ============================================================
 function App() {
   return (
     <BrowserRouter>
