@@ -10,7 +10,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  console.log("🔥 ROBOT V6 (NEWS + CHAT SECURE) INICIADO")
+  console.log("🔥 ROBOT V7 (REPORTER CHECK) INICIADO")
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -33,7 +33,7 @@ serve(async (req) => {
     // 📦 2. PREPARAR DATOS
     // ============================================================
     const payload = await req.json()
-    const { table, record } = payload // Importante: Saber de qué tabla viene
+    const { table, record } = payload 
 
     if (!record) {
       return new Response("No record", { headers: corsHeaders })
@@ -58,7 +58,22 @@ serve(async (req) => {
     // 📰 3. LÓGICA DE NOTICIAS (TABLA 'news')
     // ============================================================
     if (table === 'news') {
-      console.log(`📢 PROCESANDO NOTICIA: ${record.title}`)
+      
+      // 🛑 FILTRO DE REPORTERO (CAMBIADO A is_reporter) 🛑
+      // @ts-ignore
+      const { data: author } = await supabase
+        .from('profiles')
+        .select('is_reporter') // <--- BUSCAMOS ESTA COLUMNA ESPECÍFICA
+        .eq('id', record.author_id)
+        .single()
+
+      // Si el autor no existe O is_reporter es falso, CANCELAMOS.
+      if (!author || !author.is_reporter) {
+        console.log(`🔕 ALERTA CANCELADA: El usuario ${record.author_id} no es reportero.`)
+        return new Response("Skipped: Not a reporter", { headers: corsHeaders })
+      }
+
+      console.log(`📢 NOTICIA OFICIAL DE REPORTERO: ${record.title}`)
 
       // A. Obtener TODOS los dispositivos
       // @ts-ignore
@@ -66,15 +81,15 @@ serve(async (req) => {
 
       if (!subs || subs.length === 0) return new Response("No subs", { headers: corsHeaders })
 
-      // B. Preparar Payload "PRIORITARIO" (Foto Grande + Persistente)
+      // B. Preparar Payload "PRIORITARIO"
       const newsPayload = JSON.stringify({
-        title: `🚨 ${record.title}`, // Emoji de alerta
-        body: record.content.substring(0, 100) + '...', // Breve resumen
-        url: '/news', // Te lleva a la sección de noticias
+        title: `🚨 ${record.title}`, 
+        body: record.content.substring(0, 100) + '...',
+        url: '/news',
         icon: '/pwa-192x192.png',
-        image: record.image_url || null, // FOTO GRANDE (Si la noticia tiene foto)
+        image: record.image_url || null, 
         tag: 'news-alert',
-        priority: 'high' // Señal para el Frontend de que es urgente
+        priority: 'high'
       })
 
       console.log(`🚀 Enviando noticia a ${subs.length} personas...`)
@@ -99,7 +114,6 @@ serve(async (req) => {
     // ============================================================
     // 💬 4. LÓGICA DE CHAT (TABLA 'messages')
     // ============================================================
-    // Si la tabla es messages O tiene room_id, asumimos que es chat
     if (table === 'messages' || record.room_id) {
       
       // A. Datos del Remitente
