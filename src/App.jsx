@@ -40,27 +40,30 @@ import AdminPanel from './pages/tools/marketplace/AdminPanel'
 function App() {
 
   // ============================================================
-  // 🥅 EL PORTERO: ESCUCHA EL RETORNO DE GOOGLE (ANDROID/iOS)
+  // 🥅 EL PORTERO V2: LOGICA ROBUSTA PARA EL LOGIN
   // ============================================================
   useEffect(() => {
     // Escuchamos el evento 'appUrlOpen' que lanza Capacitor cuando una app externa nos abre
     CapApp.addListener('appUrlOpen', async ({ url }) => {
       console.log("🔗 Enlace profundo recibido en App.jsx:", url);
       
-      // La URL llega tipo: com.iurisuna.app://google-auth#access_token=...&refresh_token=...
+      // La URL llega tipo: com.iurisuna.app://google-auth#access_token=...
       
-      // Intentamos obtener la parte de los parámetros (después del # o ?)
-      const slug = url.split('.app').pop(); 
-      
-      if (slug) {
-        // Buscamos los tokens en la URL
-        const params = new URLSearchParams(slug.includes('#') ? slug.split('#')[1] : slug.split('?')[1]);
+      try {
+        // Truco para leer URLs raras: Reemplazamos el protocolo por http para usar el parser estándar
+        const cleanUrl = url.replace('com.iurisuna.app://', 'http://dummy/');
+        const urlObj = new URL(cleanUrl);
+        
+        // Google suele mandar los tokens en el HASH (#), no en el Query (?)
+        // Si hay hash, usamos el hash. Si no, buscamos en search.
+        const paramsString = urlObj.hash ? urlObj.hash.substring(1) : urlObj.search;
+        const params = new URLSearchParams(paramsString);
         
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
         
         if (accessToken && refreshToken) {
-           console.log("✅ Tokens encontrados. Iniciando sesión en Supabase...");
+           console.log("✅ Tokens detectados. Inyectando sesión...");
            
            // Inyectamos la sesión manualmente en Supabase
            const { error } = await supabase.auth.setSession({
@@ -71,9 +74,16 @@ function App() {
            if (error) {
              console.error("❌ Error al establecer sesión:", error);
            } else {
-             console.log("🎉 Sesión establecida correctamente. El usuario debería entrar.");
+             console.log("🎉 Sesión lista. FORZANDO ENTRADA AL DASHBOARD.");
+             // ESTA LÍNEA ES LA SOLUCIÓN A LA PANTALLA CONGELADA:
+             // Forzamos al navegador a ir al dashboard inmediatamente.
+             window.location.href = '/dashboard';
            }
+        } else {
+            console.log("⚠️ La URL no tenía tokens válidos.");
         }
+      } catch (e) {
+          console.error("Error procesando URL:", e);
       }
     });
   }, []);
