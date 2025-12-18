@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase.js'
 import useTheme from '../../hooks/useTheme'
 // Importamos los iconos
 import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag, Book, Newspaper, MessageCircle } from 'lucide-react'
