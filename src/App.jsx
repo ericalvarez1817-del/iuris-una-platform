@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 
 // 1. IMPORTACIONES
 import { App as CapApp } from '@capacitor/app'
 import { supabase } from './lib/supabase'
+
+// 2. IMPORTAMOS EL AIRBAG (Las letras rojas)
+// Asegúrate de haber creado este archivo en src/components/ErrorBoundary.jsx
+import ErrorBoundary from './components/ErrorBoundary'
 
 // COMPONENTE DE SEGURIDAD
 import ProtectedRoute from './components/ProtectedRoute'
@@ -28,26 +32,18 @@ import ChatRoom from './pages/chat/ChatRoom'
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
 
 // ============================================================
-// COMPONENTE INTERNO: Lógica reactiva + Debugger
+// COMPONENTE INTERNO: Lógica de Rutas
 // ============================================================
 function AppRoutes() {
   const navigate = useNavigate();
-  
-  // ESTADO PARA DEBUG (Para ver qué pasa si se congela)
-  const [logs, setLogs] = useState(["Iniciando App..."]);
-
-  const addLog = (msg) => {
-    console.log(msg);
-    setLogs(prev => [...prev.slice(-4), msg]); // Guarda los últimos 5 mensajes
-  };
 
   // 1. ESCUCHA AUTORITARIA: Supabase nos dice cuándo movernos
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      addLog(`🔐 Auth Event: ${event}`);
+      console.log(`🔐 Auth Event: ${event}`);
       
       if (event === 'SIGNED_IN' && session) {
-        addLog("✅ SIGNED_IN confirmado. Navegando...");
+        console.log("✅ SIGNED_IN confirmado. Navegando...");
         navigate('/dashboard', { replace: true });
       }
       if (event === 'SIGNED_OUT') {
@@ -61,7 +57,7 @@ function AppRoutes() {
   // 2. ESCUCHA DEL DEEP LINK: Solo inyecta datos, NO navega
   useEffect(() => {
     CapApp.addListener('appUrlOpen', async ({ url }) => {
-      addLog(`🔗 URL: ${url.slice(0, 20)}...`);
+      console.log(`🔗 URL: ${url}`);
       
       try {
         const cleanUrl = url.replace('com.iurisuna.app://', 'http://dummy/');
@@ -73,36 +69,23 @@ function AppRoutes() {
         const refreshToken = params.get('refresh_token');
         
         if (accessToken && refreshToken) {
-           addLog("🔑 Tokens OK. Inyectando...");
+           console.log("🔑 Tokens OK. Inyectando...");
            
            const { error } = await supabase.auth.setSession({
              access_token: accessToken,
              refresh_token: refreshToken,
            });
 
-           if (error) addLog(`❌ Error: ${error.message}`);
-           else addLog("🎉 Inyección OK. Esperando evento...");
-        } else {
-            addLog("⚠️ Sin tokens en URL");
+           if (error) console.error(`❌ Error SetSession: ${error.message}`);
+           else console.log("🎉 Inyección OK. Esperando evento...");
         }
       } catch (e) {
-          addLog(`💀 Error Fatal: ${e.message}`);
+          console.error(`💀 Error Fatal: ${e.message}`);
       }
     });
   }, []);
 
   return (
-    <>
-      {/* --- DEBUGGER EN PANTALLA (Solo visible si hay problemas) --- */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: 'rgba(0,0,0,0.85)', color: '#00ff00',
-        fontSize: '11px', padding: '8px', zIndex: 99999,
-        pointerEvents: 'none', fontFamily: 'monospace'
-      }}>
-        {logs.map((l, i) => <div key={i}>{l}</div>)}
-      </div>
-
       <Routes>
         <Route path="/" element={<Login />} />
 
@@ -126,15 +109,20 @@ function AppRoutes() {
           </Route>
         </Route>
       </Routes>
-    </>
   );
 }
 
+// ============================================================
+// APP PRINCIPAL: Envuelto en ErrorBoundary (Letras Rojas)
+// ============================================================
 function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    // Aquí está el "Airbag" que pediste
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
 
