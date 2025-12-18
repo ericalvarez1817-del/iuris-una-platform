@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">IURIS UNA</string>
+    <string name="title_activity_main">IURIS UNA</string>
+    <string name="package_name">com.iurisuna.app</string>
+    <string name="custom_url_scheme">com.iurisuna.app</string>
+</resources>
