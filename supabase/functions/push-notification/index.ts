@@ -3,8 +3,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.0.0"
 
-// --- CAMBIO CLAVE: Usamos esm.sh que es 100% compatible con Supabase ---
-import webpush from "https://esm.sh/web-push@3.6.3"
+// --- SOLUCIÓN FINAL: Usamos 'npm:' para evitar el error de Object prototype ---
+import webpush from "npm:web-push@3.6.3"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,7 +13,7 @@ const corsHeaders = {
 
 serve(async (req) => {
   // LOG DE VIDA
-  console.log("🔥 EL ROBOT HA DESPERTADO (Versión ESM)")
+  console.log("🔥 ROBOT V3 (NPM MODE) INICIADO")
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -21,21 +21,17 @@ serve(async (req) => {
 
   try {
     const payload = await req.json()
-    // console.log("📦 Payload recibido:", JSON.stringify(payload)) 
-
     const record = payload.record
-    
+
     if (!record) {
-      console.log("❌ No record found in payload")
+      console.log("❌ Payload vacío o sin record")
       return new Response("No record", { headers: corsHeaders })
     }
 
     // Inicializar Supabase
     // @ts-ignore
     const supabase = createClient(
-      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
-      // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
@@ -45,14 +41,23 @@ serve(async (req) => {
     const vapidPub = Deno.env.get('VAPID_PUBLIC_KEY')
 
     if (!vapidPriv || !vapidPub) {
-      console.error("❌ Faltan las claves VAPID")
-      return new Response("Keys missing", { headers: corsHeaders })
+      console.error("❌ ERROR CRÍTICO: Faltan claves VAPID en Secrets")
+      throw new Error("Missing VAPID Keys")
     }
 
-    // @ts-ignore
-    webpush.setVapidDetails('mailto:test@test.com', vapidPub, vapidPriv)
+    // Configurar WebPush
+    try {
+      webpush.setVapidDetails(
+        'mailto:iurisuna.help@gmail.com',
+        vapidPub,
+        vapidPriv
+      )
+    } catch (err) {
+      console.error("❌ Error configurando VAPID:", err)
+      throw err
+    }
 
-    // 2. BUSCAR AL USUARIO DESTINO
+    // 2. BUSCAR AL USUARIO DESTINO (Excluyendo al remitente)
     // @ts-ignore
     const { data: participants } = await supabase
       .from('chat_participants')
@@ -61,14 +66,14 @@ serve(async (req) => {
       .neq('user_id', record.sender_id)
 
     if (!participants || participants.length === 0) {
-      console.log("⚠️ Nadie a quien notificar.")
+      console.log("⚠️ Nadie más en la sala.")
       return new Response("Alone", { headers: corsHeaders })
     }
 
     // @ts-ignore
     const userIds = participants.map(p => p.user_id)
 
-    // 3. BUSCAR SI TIENEN NOTIFICACIONES ACTIVAS
+    // 3. BUSCAR TOKENS
     // @ts-ignore
     const { data: subs } = await supabase
       .from('push_subscriptions')
@@ -76,34 +81,37 @@ serve(async (req) => {
       .in('user_id', userIds)
 
     if (!subs || subs.length === 0) {
-      console.log("🔕 Sin notificaciones activas.")
+      console.log("🔕 Los participantes no tienen alertas activas.")
       return new Response("No subs", { headers: corsHeaders })
     }
 
-    console.log(`🔔 Enviando a ${subs.length} dispositivos...`)
+    console.log(`🚀 Enviando a ${subs.length} dispositivos...`)
 
-    // 4. ENVIAR
+    // 4. ENVIAR NOTIFICACIÓN
     const notificationPayload = JSON.stringify({
       title: 'Nuevo Mensaje',
       body: record.content || 'Archivo adjunto',
-      url: `/chat/${record.room_id}`
+      url: `/chat/${record.room_id}`,
+      icon: '/pwa-192x192.png'
     })
 
-    for (const sub of subs) {
-      try {
-        // @ts-ignore
-        await webpush.sendNotification({
-          endpoint: sub.endpoint,
-          keys: { p256dh: sub.p256dh, auth: sub.auth }
-        }, notificationPayload)
-      } catch (err) {
-        console.error(`❌ Error push:`, err)
-        // @ts-ignore
+    const promises = subs.map((sub: any) => {
+      return webpush.sendNotification({
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.p256dh, auth: sub.auth }
+      }, notificationPayload)
+      .then(() => console.log(`✅ Enviado a ID: ${sub.id}`))
+      .catch((err: any) => {
+        console.error(`⚠️ Falló envío a ID: ${sub.id}`, err.statusCode)
+        // Si el error es 410 (Gone) o 404, el token ya no sirve
         if (err.statusCode === 410 || err.statusCode === 404) {
-           await supabase.from('push_subscriptions').delete().eq('id', sub.id)
+          console.log(`🗑️ Borrando token muerto: ${sub.id}`)
+          supabase.from('push_subscriptions').delete().eq('id', sub.id).then()
         }
-      }
-    }
+      })
+    })
+
+    await Promise.all(promises)
 
     return new Response("Done", { headers: corsHeaders })
 
