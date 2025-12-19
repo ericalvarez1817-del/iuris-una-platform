@@ -1,14 +1,13 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 
-// 1. IMPORTACIONES
-import { App as CapApp } from '@capacitor/app'
+// 1. IMPORTACIONES (Ya no necesitamos @capacitor/app)
 import { supabase } from './lib/supabase'
 
-// 2. IMPORTAMOS EL AIRBAG (ErrorBoundary)
+// 2. IMPORTAMOS EL AIRBAG (Lo dejamos por seguridad)
 import ErrorBoundary from './components/ErrorBoundary'
 
-// 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES (NUEVO)
+// 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES
 import { initNotifications } from './lib/notifications'
 
 // COMPONENTE DE SEGURIDAD
@@ -34,39 +33,24 @@ import ChatRoom from './pages/chat/ChatRoom'
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
 
 // ============================================================
-// 🚑 PARCHE DE EMERGENCIA MEJORADO
-// Engañamos a las librerías web para que crean que tienen permiso,
-// mientras Capacitor maneja las notificaciones reales.
-// ============================================================
-if (typeof window !== 'undefined' && !('Notification' in window)) {
-  console.log("⚠️ Android WebView: Simulando API Notification.");
-  window.Notification = {
-    permission: 'granted', // Decimos "Sí" para que la UI no moleste
-    requestPermission: () => Promise.resolve('granted'),
-    maxActions: 0
-  };
-}
-// ============================================================
-
-// ============================================================
-// COMPONENTE INTERNO: Lógica de Rutas
+// COMPONENTE INTERNO: Lógica de Rutas Web
 // ============================================================
 function AppRoutes() {
   const navigate = useNavigate();
 
-  // 1. INICIALIZAR NOTIFICACIONES REALES (Capacitor)
+  // 1. INICIALIZAR NOTIFICACIONES WEB
   useEffect(() => {
-    // Esto pedirá permiso al usuario apenas abra la app
+    // Esto pedirá permiso al navegador (Chrome/Safari)
     initNotifications(); 
   }, []);
 
-  // 2. ESCUCHA AUTORITARIA: Supabase nos dice cuándo movernos
+  // 2. ESCUCHA DE SESIÓN (Mucho más simple en Web)
   useEffect(() => {
+    // Supabase maneja el retorno de Google automáticamente en Web
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log(`🔐 Auth Event: ${event}`);
+      console.log(`🔐 Evento Web: ${event}`);
       
       if (event === 'SIGNED_IN' && session) {
-        console.log("✅ SIGNED_IN confirmado. Navegando...");
         navigate('/dashboard', { replace: true });
       }
       if (event === 'SIGNED_OUT') {
@@ -76,37 +60,6 @@ function AppRoutes() {
 
     return () => subscription.unsubscribe();
   }, [navigate]);
-
-  // 3. ESCUCHA DEL DEEP LINK: Solo inyecta datos
-  useEffect(() => {
-    CapApp.addListener('appUrlOpen', async ({ url }) => {
-      console.log(`🔗 URL: ${url}`);
-      
-      try {
-        const cleanUrl = url.replace('com.iurisuna.app://', 'http://dummy/');
-        const urlObj = new URL(cleanUrl);
-        const paramsString = urlObj.hash ? urlObj.hash.substring(1) : urlObj.search;
-        const params = new URLSearchParams(paramsString);
-        
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        
-        if (accessToken && refreshToken) {
-           console.log("🔑 Tokens OK. Inyectando...");
-           
-           const { error } = await supabase.auth.setSession({
-             access_token: accessToken,
-             refresh_token: refreshToken,
-           });
-
-           if (error) console.error(`❌ Error SetSession: ${error.message}`);
-           else console.log("🎉 Inyección OK.");
-        }
-      } catch (e) {
-          console.error(`💀 Error Fatal: ${e.message}`);
-      }
-    });
-  }, []);
 
   return (
       <Routes>
@@ -136,7 +89,7 @@ function AppRoutes() {
 }
 
 // ============================================================
-// APP PRINCIPAL: Envuelto en ErrorBoundary
+// APP PRINCIPAL
 // ============================================================
 function App() {
   return (
