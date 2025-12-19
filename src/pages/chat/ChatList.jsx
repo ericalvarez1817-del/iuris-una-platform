@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { MessageCircle, Plus, Search, Users, Loader2, ArrowLeft, UserPlus, X } from 'lucide-react'
 
+// 1. IMPORTAMOS EL CEREBRO DE NOTIFICACIONES
+import { sendNotification } from '../../lib/notifications'
+
 export default function ChatList() {
   const navigate = useNavigate()
   const [rooms, setRooms] = useState([])
@@ -25,15 +28,27 @@ export default function ChatList() {
         if(session) fetchRooms(session.user.id)
     })
     
-    // Suscripción para actualizar lista si llega mensaje nuevo
+    // Suscripción para actualizar lista Y NOTIFICAR si llega mensaje nuevo
     const channel = supabase.channel('room_list_updates')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_rooms' }, () => {
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_rooms' }, (payload) => {
+        
+        // A. Actualizamos la lista visualmente
         if(session) fetchRooms(session.user.id)
+
+        // B. LÓGICA DE NOTIFICACIÓN INTELIGENTE 🔔
+        const newRoomData = payload.new;
+        
+        // Si hay un mensaje nuevo (y no es solo un cambio de nombre de grupo)
+        if (newRoomData.last_message) {
+            // Enviamos la notificación al celular/web
+            // Nota: Usamos un título genérico porque en el evento 'raw' no tenemos los nombres de los usuarios aún
+            sendNotification("💬 Nuevo Mensaje", newRoomData.last_message);
+        }
     })
     .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [])
+  }, [session]) // Agregamos session a dependencias para asegurar consistencia
 
   const fetchRooms = async (userId) => {
     // 1. Obtener IDs de mis salas

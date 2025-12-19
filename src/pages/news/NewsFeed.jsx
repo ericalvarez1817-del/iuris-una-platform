@@ -6,6 +6,9 @@ import {
   Loader2, Image as ImageIcon, BadgeCheck, User, Trash2
 } from 'lucide-react'
 
+// 1. IMPORTAMOS EL NOTIFICADOR
+import { sendNotification } from '../../lib/notifications'
+
 // TU ID DE ADMIN
 const ADMIN_ID = '8ce7cf5d-700f-419e-a180-c5c1af8f627c'
 
@@ -27,12 +30,41 @@ export default function NewsFeed() {
   const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    // 1. Obtener sesión inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session)
+    })
+    
+    // 2. Cargar noticias iniciales
     fetchNews()
-  }, [])
+
+    // 3. SUSCRIPCIÓN EN TIEMPO REAL (El Oído) 👂
+    const channel = supabase.channel('news_updates')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'news' }, (payload) => {
+          
+          // A. Refrescamos la lista visualmente
+          fetchNews()
+
+          // B. NOTIFICACIÓN (Solo si no fui yo el que publicó)
+          const newArticle = payload.new
+          
+          // Verificamos session?.user?.id para no notificarnos a nosotros mismos
+          if (session && newArticle.author_id !== session.user.id) {
+              sendNotification("📰 IURIS NEWS", newArticle.title)
+          } else if (!session) {
+              // Si por alguna razón la sesión no cargó aún, notificamos igual por seguridad
+              sendNotification("📰 IURIS NEWS", newArticle.title)
+          }
+      })
+      .subscribe()
+
+    // Limpieza al salir
+    return () => supabase.removeChannel(channel)
+
+  }, [session]) // Dependemos de session para saber si soy yo el autor
 
   const fetchNews = async () => {
-    setLoading(true)
+    // Nota: Quitamos setLoading(true) global para que no parpadee al recibir actualizaciones en vivo
     const { data, error } = await supabase
       .from('news')
       .select('*, profiles(full_name, is_reporter, avatar_url)')
@@ -40,7 +72,8 @@ export default function NewsFeed() {
     
     if (error) console.error(error)
     else setNews(data || [])
-    setLoading(false)
+    
+    setLoading(false) // Solo quitamos el loading inicial
   }
 
   const handlePublish = async () => {
@@ -68,7 +101,7 @@ export default function NewsFeed() {
           alert("¡Noticia publicada!")
           setShowModal(false)
           setForm({ title: '', content: '', category: 'UNA', image: null })
-          fetchNews()
+          // fetchNews se llama automáticamente por el listener en tiempo real
 
       } catch (e) {
           alert("Error: " + e.message)
@@ -246,8 +279,6 @@ export default function NewsFeed() {
               </h1>
 
               {/* CUERPO DEL TEXTO (OPTIMIZADO PARA LECTURA MOVIL) */}
-              {/* whitespace-pre-line: Respeta saltos de línea (párrafos) pero colapsa espacios laterales */}
-              {/* break-words: Fuerza a que las palabras largas bajen de línea si no caben */}
               <div className="text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-300 font-serif whitespace-pre-line break-words text-justify hyphens-auto">
                 {selectedNews.content}
               </div>
