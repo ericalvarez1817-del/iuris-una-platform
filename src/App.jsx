@@ -5,8 +5,7 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { App as CapApp } from '@capacitor/app'
 import { supabase } from './lib/supabase'
 
-// 2. IMPORTAMOS EL AIRBAG (Las letras rojas)
-// Asegúrate de haber creado este archivo en src/components/ErrorBoundary.jsx
+// 2. IMPORTAMOS EL AIRBAG (ErrorBoundary)
 import ErrorBoundary from './components/ErrorBoundary'
 
 // COMPONENTE DE SEGURIDAD
@@ -30,6 +29,20 @@ import NewsFeed from './pages/news/NewsFeed'
 import ChatList from './pages/chat/ChatList'
 import ChatRoom from './pages/chat/ChatRoom'
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
+
+// ============================================================
+// 🚑 PARCHE DE EMERGENCIA (Polyfill de Notificaciones)
+// Soluciona el error: "ReferenceError: Notification is not defined"
+// ============================================================
+if (typeof window !== 'undefined' && !('Notification' in window)) {
+  console.log("⚠️ Android WebView detectado: Creando Notification Falso para evitar crash.");
+  window.Notification = {
+    permission: 'denied', // Simulamos que el usuario denegó permiso
+    requestPermission: () => Promise.resolve('denied'),
+    maxActions: 0
+  };
+}
+// ============================================================
 
 // ============================================================
 // COMPONENTE INTERNO: Lógica de Rutas
@@ -113,11 +126,10 @@ function AppRoutes() {
 }
 
 // ============================================================
-// APP PRINCIPAL: Envuelto en ErrorBoundary (Letras Rojas)
+// APP PRINCIPAL: Envuelto en ErrorBoundary
 // ============================================================
 function App() {
   return (
-    // Aquí está el "Airbag" que pediste
     <ErrorBoundary>
       <BrowserRouter>
         <AppRoutes />
