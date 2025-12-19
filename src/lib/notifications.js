@@ -1,74 +1,84 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
-// --- 1. INICIALIZAR Y PEDIR PERMISOS (HÍBRIDO) ---
+// ID del canal (Constante para no equivocarnos)
+const CHANNEL_ID = 'iuris_channel_v1';
+
+// --- 1. INICIALIZAR Y PEDIR PERMISOS ---
 export const initNotifications = async () => {
-  // A. Si es Celular (Android/iOS)
   if (Capacitor.isNativePlatform()) {
     try {
+      console.log("📱 Iniciando sistema de notificaciones nativas...");
+      
+      // 1. Pedir permiso
       const permission = await LocalNotifications.requestPermissions();
+      
       if (permission.display === 'granted') {
-        console.log("📱 Android: Permiso concedido");
-        // Crear canal de alta prioridad para que suene fuerte
+        console.log("✅ Permiso CONCEDIDO");
+        // 2. Crear canal (Vital para Android)
+        await createChannel();
+      } else {
+        console.warn("🚫 Permiso DENEGADO");
+      }
+    } catch (e) {
+      console.error("❌ Error en initNotifications:", e);
+    }
+  } else if ('Notification' in window) {
+    // Web
+    Notification.requestPermission();
+  }
+};
+
+// Función auxiliar para crear el canal
+const createChannel = async () => {
+    try {
         await LocalNotifications.createChannel({
-            id: 'iuris_channel',
-            name: 'Alertas Iuris',
-            importance: 5,
+            id: CHANNEL_ID,
+            name: 'Notificaciones IURIS',
+            description: 'Alertas de noticias y chats',
+            importance: 5, // 5 = Suena y vibra fuerte
             visibility: 1,
             vibration: true,
             sound: 'beep.wav' 
         });
-      }
+        console.log("📡 Canal de notificaciones creado/verificado");
     } catch (e) {
-      console.error("Error en permisos móvil:", e);
+        console.error("Error creando canal:", e);
     }
-  } 
-  // B. Si es Web (Chrome/PC)
-  else if ('Notification' in window) {
-    const permission = await Notification.requestPermission();
-    console.log(`💻 Web: Permiso ${permission}`);
-  }
-};
+}
 
-// --- 2. ENVIAR NOTIFICACIÓN (EL CÓDIGO INTELIGENTE) ---
-// Úsa esta función en tu Agenda, Chat o Tracker. Ella sabrá qué hacer.
+// --- 2. ENVIAR NOTIFICACIÓN ---
 export const sendNotification = async (title, body, scheduleTime = null) => {
-  const id = Math.floor(Math.random() * 100000); // ID único
+  const id = Math.floor(Math.random() * 100000);
 
-  // --- MODO CELULAR ---
+  // --- MODO CELULAR (ANDROID) ---
   if (Capacitor.isNativePlatform()) {
     try {
+      // TRUCO DE SEGURIDAD: Intentamos crear el canal de nuevo por si acaso no existía
+      await createChannel();
+
       await LocalNotifications.schedule({
         notifications: [{
           title: title,
           body: body,
           id: id,
           schedule: scheduleTime ? { at: scheduleTime } : undefined,
-          channelId: 'iuris_channel',
-          smallIcon: 'ic_stat_icon_config_sample', // Icono por defecto
+          channelId: CHANNEL_ID, // Tiene que coincidir con el creado arriba
+          smallIcon: 'ic_stat_icon_config_sample',
           actionTypeId: '',
           extra: null
         }]
       });
-      console.log("📲 Notificación enviada al sistema Android");
+      console.log("📲 Notificación enviada a Android con éxito");
     } catch (e) {
-      console.error("Error enviando notificación nativa:", e);
+      console.error("❌ Error enviando notificación nativa:", e);
     }
   } 
-  // --- MODO WEB ---
+  // --- MODO WEB (PC) ---
   else if ('Notification' in window && Notification.permission === 'granted') {
-    // Si hay tiempo programado, usamos setTimeout para simular la espera en web
-    if (scheduleTime) {
-      const now = new Date().getTime();
-      const delay = scheduleTime.getTime() - now;
-      if (delay > 0) {
-        setTimeout(() => new Notification(title, { body }), delay);
-        return;
-      }
-    }
-    // Si es inmediata
     new Notification(title, { body });
-  } else {
-    console.log("⚠️ No hay permisos o soporte para notificaciones.");
+  } 
+  else {
+    console.log("⚠️ No se pudo enviar notificación (Falta permiso o soporte)");
   }
 };
