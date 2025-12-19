@@ -8,6 +8,9 @@ import { supabase } from './lib/supabase'
 // 2. IMPORTAMOS EL AIRBAG (ErrorBoundary)
 import ErrorBoundary from './components/ErrorBoundary'
 
+// 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES (NUEVO)
+import { initNotifications } from './lib/notifications'
+
 // COMPONENTE DE SEGURIDAD
 import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/layout/AppLayout'
@@ -31,14 +34,15 @@ import ChatRoom from './pages/chat/ChatRoom'
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
 
 // ============================================================
-// 🚑 PARCHE DE EMERGENCIA (Polyfill de Notificaciones)
-// Soluciona el error: "ReferenceError: Notification is not defined"
+// 🚑 PARCHE DE EMERGENCIA MEJORADO
+// Engañamos a las librerías web para que crean que tienen permiso,
+// mientras Capacitor maneja las notificaciones reales.
 // ============================================================
 if (typeof window !== 'undefined' && !('Notification' in window)) {
-  console.log("⚠️ Android WebView detectado: Creando Notification Falso para evitar crash.");
+  console.log("⚠️ Android WebView: Simulando API Notification.");
   window.Notification = {
-    permission: 'denied', // Simulamos que el usuario denegó permiso
-    requestPermission: () => Promise.resolve('denied'),
+    permission: 'granted', // Decimos "Sí" para que la UI no moleste
+    requestPermission: () => Promise.resolve('granted'),
     maxActions: 0
   };
 }
@@ -50,7 +54,13 @@ if (typeof window !== 'undefined' && !('Notification' in window)) {
 function AppRoutes() {
   const navigate = useNavigate();
 
-  // 1. ESCUCHA AUTORITARIA: Supabase nos dice cuándo movernos
+  // 1. INICIALIZAR NOTIFICACIONES REALES (Capacitor)
+  useEffect(() => {
+    // Esto pedirá permiso al usuario apenas abra la app
+    initNotifications(); 
+  }, []);
+
+  // 2. ESCUCHA AUTORITARIA: Supabase nos dice cuándo movernos
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`🔐 Auth Event: ${event}`);
@@ -67,7 +77,7 @@ function AppRoutes() {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // 2. ESCUCHA DEL DEEP LINK: Solo inyecta datos, NO navega
+  // 3. ESCUCHA DEL DEEP LINK: Solo inyecta datos
   useEffect(() => {
     CapApp.addListener('appUrlOpen', async ({ url }) => {
       console.log(`🔗 URL: ${url}`);
@@ -90,7 +100,7 @@ function AppRoutes() {
            });
 
            if (error) console.error(`❌ Error SetSession: ${error.message}`);
-           else console.log("🎉 Inyección OK. Esperando evento...");
+           else console.log("🎉 Inyección OK.");
         }
       } catch (e) {
           console.error(`💀 Error Fatal: ${e.message}`);
