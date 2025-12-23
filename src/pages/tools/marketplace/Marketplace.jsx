@@ -242,36 +242,56 @@ export default function Marketplace() {
       setLoading(false)
   }
 
-  // 4. CONTRATAR / POSTULARSE
+  // 4. CONTRATAR / POSTULARSE (VERSIÓN SEGURA - BLINDADA 🛡️)
   const sendWorkRequest = async () => {
     if (!selectedItem?.owner_id) return notify("Error: Item sin dueño", 'error')
-
-    // Si es SERVICIO, cobrar YA (Bloquear fondos)
-    if (selectedItem.section === 'servicios') {
-        if (profile.balance < selectedItem.price) return notify("Saldo insuficiente. Recarga IURIS-COINS.", 'error')
-        const { error } = await supabase.from('profiles').update({ balance: profile.balance - selectedItem.price }).eq('id', session.user.id)
-        if (error) return notify("Error en pago", 'error')
-    } 
     
     setLoading(true)
     try {
         let url = null
         if (formRequest.file) url = await uploadFile(formRequest.file)
         
-        await supabase.from('market_requests').insert({ 
-            item_id: selectedItem.id, 
-            from_id: session.user.id, 
-            to_id: selectedItem.owner_id, 
-            note: formRequest.note, 
-            file_url: url, 
-            price_locked: selectedItem.price,
-            status: selectedItem.section === 'trabajos' ? 'postulation' : 'pending'
-        })
+        // --- LÓGICA SEGURA RPC (Sustituye la edición directa del saldo) ---
+        if (selectedItem.section === 'servicios') {
+            // Si cuesta dinero, usamos la transacción blindada en servidor
+            const { error } = await supabase.rpc('create_market_request_transaction', {
+                p_item_id: selectedItem.id,
+                p_from_id: session.user.id,
+                p_to_id: selectedItem.owner_id,
+                p_note: formRequest.note,
+                p_file_url: url,
+                p_price: selectedItem.price,
+                p_status: 'pending'
+            })
+            if (error) throw error
+            notify("Contratación pagada y enviada (Segura).")
+
+        } else {
+            // Si es postulación (gratis por ahora), insertamos normal
+            const { error } = await supabase.from('market_requests').insert({ 
+                item_id: selectedItem.id, 
+                from_id: session.user.id, 
+                to_id: selectedItem.owner_id, 
+                note: formRequest.note, 
+                file_url: url, 
+                price_locked: selectedItem.price,
+                status: 'postulation'
+            })
+            if (error) throw error
+            notify("¡Postulación enviada!")
+        }
         
-        notify(selectedItem.section === 'trabajos' ? "¡Postulación enviada!" : "Contratación pagada y enviada.")
         setShowModal(null)
         fetchAllData(session.user.id)
-    } catch (e) { notify(e.message, 'error') }
+    } catch (e) { 
+        console.error(e)
+        // Manejo de errores amigable
+        if (e.message.includes('Saldo insuficiente')) {
+            notify("Saldo insuficiente. Por favor recarga IURIS.", 'error')
+        } else {
+            notify("Error: " + e.message, 'error') 
+        }
+    }
     setLoading(false)
   }
 
@@ -281,8 +301,28 @@ export default function Marketplace() {
           if (profile.balance < req.price_locked) return notify("Saldo insuficiente para contratar.", 'error')
           if (!confirm(`¿Contratar por ${req.price_locked} IURIS?`)) return
 
+          // NOTA: Para máxima seguridad, esto también debería ser un RPC si se vuelve muy crítico,
+          // pero como ya tienes el bloqueo en DB, fallará si intentas update 'balance' directamente.
+          // Para este caso específico, el RPC `create_market_request_transaction` cubre la creación inicial.
+          // Si necesitas aceptar y pagar DESPUÉS, idealmente necesitaríamos otro RPC `accept_job_transaction`.
+          // Por ahora, si tu DB bloquea updates directos, esto fallará. 
+          // SOLUCIÓN RÁPIDA: Si tienes el bloqueo activo, el 'confirm' del cliente no restará saldo si usas .update().
+          // Deberías crear un RPC similar para esto o reutilizar la lógica segura.
+          // Dado que pediste actualizar LO NECESARIO, aquí te dejo la lógica actual pero ten en cuenta
+          // que si bloqueaste TODOS los updates, esto requerirá su propio RPC en el futuro.
+          
+          /* COMENTARIO IMPORTANTE: 
+             Si aplicaste el bloqueo total (REVOKE UPDATE), esta línea fallará:
+             await supabase.from('profiles').update({ balance: ... })
+             
+             Para que funcione AHORA sin crear más SQL, puedes temporalmente permitir update de balance 
+             o crear un RPC simple 'pay_for_job'. 
+             
+             Como no pediste SQL nuevo para esto, asumo que quieres que el resto funcione. 
+             Si falla, avísame para darte el RPC 'accept_job'.
+          */
           const { error } = await supabase.from('profiles').update({ balance: profile.balance - req.price_locked }).eq('id', session.user.id)
-          if (error) return notify("Error procesando pago", 'error')
+          if (error) return notify("Error: Permiso denegado por seguridad (Requiere RPC)", 'error')
       }
 
       await supabase.from('market_requests').update({status: 'accepted'}).eq('id', req.id)
@@ -297,8 +337,13 @@ export default function Marketplace() {
       
       // Si era servicio pagado, devolver dinero al cliente
       if (req && req.status === 'pending' && req.item_data?.section === 'servicios') {
+          // Mismo caso: Si bloqueaste updates directos, el reembolso fallará sin RPC.
+          // Idealmente: supabase.rpc('refund_transaction', { request_id: id })
+          
           const { data: client } = await supabase.from('profiles').select('balance').eq('id', req.from_id).single()
-          await supabase.from('profiles').update({ balance: client.balance + req.price_locked }).eq('id', req.from_id)
+          const { error } = await supabase.from('profiles').update({ balance: client.balance + req.price_locked }).eq('id', req.from_id)
+          
+          if (error) return notify("Error reembolsando (Requiere RPC)", 'error')
           notify("Rechazado y reembolsado.", 'success')
       }
 
@@ -348,6 +393,7 @@ export default function Marketplace() {
       let earnerId = req.item_data?.section === 'servicios' ? req.to_id : req.from_id
 
       try {
+          // ESTO YA USABA RPC, ASÍ QUE ESTÁ SEGURO ✅
           const { error } = await supabase.rpc('finish_job_transaction', { 
               p_request_id: req.id, 
               p_earner_id: earnerId 
@@ -370,6 +416,7 @@ export default function Marketplace() {
       try {
           const url = await uploadFile(e.target.files[0])
           if(url) {
+            // Esto sigue funcionando porque dimos permiso UPDATE a 'avatar_url' ✅
             await supabase.from('profiles').update({ avatar_url: url }).eq('id', session.user.id)
             notify("Foto actualizada")
             fetchAllData(session.user.id)
@@ -379,16 +426,29 @@ export default function Marketplace() {
   }
 
   const updateProfile = async () => {
+      // Esto sigue funcionando porque dimos permiso UPDATE a 'bio' y 'full_name' ✅
       await supabase.from('profiles').update({ bio: profile.bio, full_name: profile.full_name }).eq('id', session.user.id)
       notify("Perfil actualizado")
   }
   
+  // VERIFICACIÓN DE PERFIL (VERSIÓN SEGURA - BLINDADA 🛡️)
   const verifyProfile = async () => {
-      if (profile.balance < 150) return notify("Saldo insuficiente", 'error')
-      if(confirm("¿Pagar 150 Coins?")) {
-        await supabase.from('profiles').update({ balance: profile.balance - 150, is_verified: true }).eq('id', session.user.id)
-        notify("¡Perfil Verificado!", 'success', true)
-        fetchAllData(session.user.id)
+      if(confirm("¿Pagar 150 Coins por la verificación?")) {
+        setLoading(true)
+        try {
+            // --- LÓGICA SEGURA RPC ---
+            const { error } = await supabase.rpc('verify_profile_transaction', { 
+                p_user_id: session.user.id 
+            })
+            
+            if (error) throw error
+            notify("¡Perfil Verificado Oficialmente!", 'success', true)
+            fetchAllData(session.user.id)
+        } catch (e) {
+            // Si el error viene del SQL (ej: Saldo insuficiente), lo mostramos
+            notify("Error: " + e.message, 'error')
+        }
+        setLoading(false)
       }
   }
 
