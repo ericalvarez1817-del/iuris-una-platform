@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { MessageCircle, Plus, Search, Users, Loader2, ArrowLeft, UserPlus, X } from 'lucide-react'
+import { MessageCircle, Plus, Search, Users, Loader2, ArrowLeft, X } from 'lucide-react'
 
 // 1. IMPORTAMOS EL CEREBRO DE NOTIFICACIONES
 import { sendNotification } from '../../lib/notifications'
@@ -18,7 +18,8 @@ export default function ChatList() {
   
   // Forms
   const [newGroupName, setNewGroupName] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = useState('') // Búsqueda Global (Modal)
+  const [localFilter, setLocalFilter] = useState('') // Búsqueda Local (Lista)
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
 
@@ -40,15 +41,13 @@ export default function ChatList() {
         
         // Si hay un mensaje nuevo (y no es solo un cambio de nombre de grupo)
         if (newRoomData.last_message) {
-            // Enviamos la notificación al celular/web
-            // Nota: Usamos un título genérico porque en el evento 'raw' no tenemos los nombres de los usuarios aún
             sendNotification("💬 Nuevo Mensaje", newRoomData.last_message);
         }
     })
     .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [session]) // Agregamos session a dependencias para asegurar consistencia
+  }, [session])
 
   const fetchRooms = async (userId) => {
     // 1. Obtener IDs de mis salas
@@ -60,14 +59,14 @@ export default function ChatList() {
     if (myInvolvements && myInvolvements.length > 0) {
         const roomIds = myInvolvements.map(r => r.room_id)
         
-        // 2. Traer salas + nombres (Si es DM, necesitamos saber el nombre del OTRO, no de la sala que es null)
+        // 2. Traer salas + nombres
         const { data: roomData } = await supabase
             .from('chat_rooms')
             .select('*, chat_participants(profiles(full_name, avatar_url, id))')
             .in('id', roomIds)
             .order('last_message_time', { ascending: false })
         
-        // Procesar datos para que sea fácil de pintar
+        // Procesar datos
         const formattedRooms = roomData.map(room => {
             if (room.is_group) {
                 return { ...room, display_name: room.name, display_image: room.image_url }
@@ -86,6 +85,11 @@ export default function ChatList() {
     }
     setLoading(false)
   }
+
+  // --- FILTRADO LOCAL (MEJORA UX) ---
+  const visibleRooms = rooms.filter(room => 
+    room.display_name.toLowerCase().includes(localFilter.toLowerCase())
+  )
 
   // --- CREAR GRUPO (USANDO RPC) ---
   const createGroup = async () => {
@@ -109,7 +113,7 @@ export default function ChatList() {
     }
   }
 
-  // --- BUSCAR USUARIOS ---
+  // --- BUSCAR USUARIOS (GLOBAL) ---
   const handleSearchUsers = async (term) => {
     setSearchTerm(term)
     if(term.length < 3) return setSearchResults([])
@@ -147,27 +151,42 @@ export default function ChatList() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20 transition-colors">
       {/* HEADER */}
       <div className="bg-white dark:bg-slate-900 sticky top-0 z-10 p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-3">
-             <button onClick={() => navigate('/dashboard')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><ArrowLeft size={20} className="dark:text-white"/></button>
+             <button onClick={() => navigate('/dashboard')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"><ArrowLeft size={20} className="dark:text-white"/></button>
              <h1 className="text-xl font-black text-slate-800 dark:text-white">Chats</h1>
         </div>
         
-        {/* MENÚ FLOTANTE SIMPLE */}
+        {/* BOTONES ACCIÓN */}
         <div className="flex gap-2">
-            <button onClick={() => setShowUserModal(true)} className="p-2 bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 rounded-full">
-                <Search size={20}/>
-            </button>
             <button onClick={() => setShowGroupModal(true)} className="p-2 bg-indigo-600 text-white rounded-full shadow-lg active:scale-95 transition">
                 <Plus size={20}/>
             </button>
         </div>
       </div>
 
-      {/* LISTA */}
-      <div className="p-2">
+      {/* BARRA DE BÚSQUEDA LOCAL (NUEVO) */}
+      <div className="px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-50 dark:border-slate-800">
+        <div className="relative bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center px-3 py-2 transition-colors focus-within:ring-2 focus-within:ring-indigo-500/20">
+            <Search size={18} className="text-slate-400 mr-2"/>
+            <input 
+                className="bg-transparent outline-none w-full text-sm dark:text-white font-medium placeholder:text-slate-400"
+                placeholder="Buscar en tus chats..."
+                value={localFilter}
+                onChange={(e) => setLocalFilter(e.target.value)}
+            />
+            {localFilter && (
+                <button onClick={() => setLocalFilter('')}>
+                    <X size={16} className="text-slate-400"/>
+                </button>
+            )}
+        </div>
+      </div>
+
+      {/* LISTA DE CHATS */}
+      <div className="p-2 space-y-2">
         {loading ? (
             <div className="text-center py-10"><Loader2 className="animate-spin mx-auto text-indigo-500"/></div>
         ) : rooms.length === 0 ? (
@@ -176,22 +195,41 @@ export default function ChatList() {
                 <p className="text-sm dark:text-slate-400">No tienes chats activos.</p>
                 <button onClick={() => setShowUserModal(true)} className="mt-4 text-indigo-500 font-bold text-sm">Buscar a alguien</button>
             </div>
+        ) : visibleRooms.length === 0 ? (
+            // ESTADO VACÍO DE FILTRO
+            <div className="text-center py-10">
+                <p className="text-sm text-slate-400 mb-2">No encontré chats con "{localFilter}"</p>
+                <button 
+                    onClick={() => {
+                        setSearchTerm(localFilter) // Pasamos lo que escribió al buscador global
+                        setLocalFilter('') // Limpiamos filtro local
+                        setShowUserModal(true) // Abrimos modal global
+                    }} 
+                    className="text-indigo-600 dark:text-indigo-400 font-bold text-sm bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2 rounded-full"
+                >
+                    Buscar en Directorio Global
+                </button>
+            </div>
         ) : (
-            rooms.map(room => (
+            visibleRooms.map(room => (
                 <div 
                     key={room.id} 
                     onClick={() => navigate(`/chat/${room.id}`)}
-                    className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-2xl mb-2 border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition cursor-pointer"
+                    className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition cursor-pointer hover:shadow-sm"
                 >
-                    <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-lg overflow-hidden">
+                    <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-lg overflow-hidden shrink-0">
                         {room.display_image ? <img src={room.display_image} className="w-full h-full object-cover"/> : (room.display_name?.charAt(0) || '#')}
                     </div>
-                    <div className="flex-1 overflow-hidden">
-                        <div className="flex justify-between items-center">
+                    <div className="flex-1 overflow-hidden min-w-0">
+                        <div className="flex justify-between items-center mb-0.5">
                             <h3 className="font-bold text-slate-800 dark:text-white truncate text-sm">{room.display_name}</h3>
-                            <span className="text-[10px] text-slate-400">{new Date(room.last_message_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                            <span className="text-[10px] text-slate-400 shrink-0 ml-2 font-medium">
+                                {new Date(room.last_message_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                            </span>
                         </div>
-                        <p className="text-xs text-slate-500 truncate">{room.last_message}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-medium">
+                            {room.last_message ? room.last_message : <span className="italic opacity-50">Borrador...</span>}
+                        </p>
                     </div>
                 </div>
             ))
@@ -210,7 +248,7 @@ export default function ChatList() {
                     value={newGroupName}
                     onChange={e => setNewGroupName(e.target.value)}
                 />
-                <button onClick={createGroup} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase tracking-widest shadow-lg">Crear Grupo</button>
+                <button onClick={createGroup} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase tracking-widest shadow-lg active:scale-95 transition">Crear Grupo</button>
             </div>
         </div>
       )}
@@ -224,7 +262,7 @@ export default function ChatList() {
                 
                 <input 
                     className="w-full p-3 bg-slate-100 dark:bg-slate-800 rounded-xl mb-4 outline-none font-bold dark:text-white"
-                    placeholder="Buscar por nombre..."
+                    placeholder="Buscar en directorio global..."
                     autoFocus
                     value={searchTerm}
                     onChange={e => handleSearchUsers(e.target.value)}
