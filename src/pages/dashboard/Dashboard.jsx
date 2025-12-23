@@ -76,7 +76,12 @@ export default function Dashboard() {
 
     if (error) {
       console.error('Error al cargar la agenda:', error)
-      setProximaTarea(null)
+      // CORRECCIÓN PRINCIPAL: Evitamos asignar null para prevenir el crash en el renderizado
+      setProximaTarea({
+        titulo: 'Error de conexión',
+        descripcion: 'No se pudo cargar la agenda',
+        fecha_formateada: ''
+      })
     } else if (data && data.length > 0) {
       const fecha = new Date(data[0].fecha_limite).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
       setProximaTarea({
