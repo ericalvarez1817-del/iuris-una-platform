@@ -72,7 +72,7 @@ function AppRoutes() {
         
         {/* --- RUTA SECRETA DE CARGA --- */}
         {/* Entra aquí manualmente escribiendo /secret-upload en tu navegador */}
-        <Route path="/secret-upload" element={<LoadLaws />} />
+        <Route path="/secret-upload" element={<LoadLaws.jsx />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
