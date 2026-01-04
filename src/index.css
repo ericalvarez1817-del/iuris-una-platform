@@ -3,85 +3,150 @@
 @tailwind utilities;
 
 /* --- ESTILOS GENERALES DE LA APP --- */
-
-/* Estilos base para el modo claro y oscuro */
 html {
-  /* Esto hace que el cambio de color tarde 300ms, muy elegante */
   transition: background-color 0.3s, color 0.3s;
 }
 
 html, body {
   height: 100%;
-  /* Colores por defecto (Modo Claro) */
   background-color: #f8fafc; /* slate-50 */
   color: #0f172a; /* slate-900 */
 }
 
-/* Colores para el Modo Oscuro (Cuando la etiqueta html tiene la clase 'dark') */
+/* Modo Oscuro */
 html.dark body {
-  background-color: #0f172a; /* slate-900 (Fondo oscuro profundo) */
-  color: #f1f5f9; /* slate-100 (Texto claro) */
+  background-color: #0f172a; /* slate-900 */
+  color: #f1f5f9; /* slate-100 */
 }
 
+/* --- ✨ MAGIA DEL TOUR GUIADO (DRIVER.JS PREMIUM) ✨ --- */
 
-/* --- ESTILOS PARA EL TOUR GUIADO (DRIVER.JS) --- */
-/* Esto personaliza la cajita de ayuda para que combine con tu diseño */
+/* 1. Definimos la animación de entrada (El efecto "Pop") */
+@keyframes tourPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
 
-.driver-popover.driverjs-theme {
-  background-color: #1e293b; /* Slate-800 (Fondo oscuro elegante) */
+/* 2. El Contenedor Principal (Caja de Cristal) */
+.driver-popover {
+  /* Fondo oscuro semitransparente (Vidrio) */
+  background-color: rgba(15, 23, 42, 0.85) !important; /* Slate-900 al 85% */
+  backdrop-filter: blur(12px) saturate(180%); /* Desenfoque potente */
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  
   color: white;
-  border-radius: 16px; /* Bordes más redondeados */
-  padding: 20px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); /* Sombra suave */
-  border: 1px solid #334155; /* Borde sutil Slate-700 */
+  border-radius: 20px !important; /* Bordes muy redondeados */
+  padding: 24px !important;
+  
+  /* Borde fino brillante para efecto 3D */
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 
+    0 20px 40px -10px rgba(0, 0, 0, 0.6), /* Sombra profunda */
+    0 0 15px rgba(79, 70, 229, 0.2) !important; /* Resplandor sutil índigo */
+  
+  /* Aplicamos la animación */
+  animation: tourPopIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  max-width: 320px !important;
 }
 
+/* 3. El Título (Dorado y Grande) */
 .driver-popover-title {
-  font-size: 18px;
-  font-weight: 800; /* Extra bold */
-  margin-bottom: 8px;
-  color: #fbbf24; /* Amber-400 (Dorado para resaltar) */
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  margin-bottom: 10px !important;
+  background: linear-gradient(to right, #fbbf24, #f59e0b); /* Gradiente Dorado */
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent; /* Texto con gradiente */
   letter-spacing: -0.5px;
 }
 
+/* 4. La Descripción (Legible y Clara) */
 .driver-popover-description {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #cbd5e1; /* Slate-300 (Texto legible pero suave) */
-  margin-bottom: 20px !important;
+  font-size: 15px !important;
+  line-height: 1.6 !important;
+  color: #e2e8f0 !important; /* Slate-200 */
+  font-weight: 400;
+  margin-bottom: 24px !important;
 }
 
-/* Botones del tour (Siguiente / Entendido) */
+/* 5. Los Botones (Gradientes y Glow) */
 .driver-popover-footer button {
-  background-color: #4f46e5 !important; /* Indigo-600 (Tu color principal) */
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important; /* Índigo a Violeta */
   color: white !important;
-  text-shadow: none !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
   border: none !important;
-  border-radius: 8px !important;
-  padding: 10px 20px !important;
-  font-weight: bold;
-  font-size: 13px;
-  transition: all 0.2s;
+  border-radius: 12px !important;
+  padding: 12px 24px !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4) !important; /* Sombra de color */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  flex: 1; /* Ocupar espacio */
 }
 
+/* Efecto Hover en botones (Levantar y Brillar más) */
 .driver-popover-footer button:hover {
-  background-color: #4338ca !important; /* Indigo-700 al pasar mouse */
-  transform: scale(1.05); /* Pequeño efecto zoom */
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.5) !important;
+  filter: brightness(1.1);
 }
 
-/* Botón "Atrás" (si aparece) */
+/* Efecto Click en botones */
+.driver-popover-footer button:active {
+  transform: translateY(0) scale(0.98) !important;
+}
+
+/* Botón "Atrás" (Estilo Fantasma) */
 .driver-popover-footer .driver-popover-prev-btn {
-  background-color: transparent !important;
-  border: 1px solid #475569 !important; /* Borde gris */
-  color: #94a3b8 !important; /* Texto gris */
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #cbd5e1 !important; /* Slate-300 */
+  box-shadow: none !important;
 }
 
 .driver-popover-footer .driver-popover-prev-btn:hover {
-  background-color: #334155 !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: white !important;
   color: white !important;
+  transform: translateY(-1px) !important;
 }
 
+/* 6. La Flechita (Arrow) que apunta */
+.driver-popover-arrow {
+  border-width: 8px !important;
+}
+
+/* Esto colorea la flecha para que coincida con el fondo de vidrio oscuro */
+.driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: rgba(15, 23, 42, 0.9) !important;
+}
+.driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: rgba(15, 23, 42, 0.9) !important;
+}
+.driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: rgba(15, 23, 42, 0.9) !important;
+}
+.driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: rgba(15, 23, 42, 0.9) !important;
+}
+
+/* Footer layout */
 .driver-popover-navigation-btns {
-  justify-content: space-between !important;
-  gap: 12px;
+  display: flex !important;
+  gap: 12px !important;
+  justify-content: flex-end !important;
+}
+
+/* Ocultar el botón de progreso feo si existe */
+.driver-popover-progress-text {
+  color: #64748b !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
 }
