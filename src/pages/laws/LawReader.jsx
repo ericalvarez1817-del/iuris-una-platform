@@ -1,24 +1,33 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { ArrowLeft, BookOpen, Search, Type, Share2, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Type, Copy, Check, ChevronDown } from 'lucide-react'
 
 export default function LawReader() {
   const { id } = useParams()
   const navigate = useNavigate()
   
-  const [articles, setArticles] = useState([]) // Lista de artículos cargados
+  const [articles, setArticles] = useState([]) 
   const [loading, setLoading] = useState(true)
   const [initialLaw, setInitialLaw] = useState(null)
-  const [copiedId, setCopiedId] = useState(null)
-  const [fontSize, setFontSize] = useState('text-lg') // Control de tamaño de letra
+  const [fontSize, setFontSize] = useState('text-lg')
 
-  // 1. Cargar el artículo inicial y sus vecinos
+  // --- FUNCIÓN DE LIMPIEZA VISUAL (PARCHE) ---
+  // Intenta ocultar el título del siguiente artículo si quedó pegado al final
+  const cleanContentVisual = (html) => {
+    if (!html) return ""
+    // Si el texto termina con un título en mayúsculas tipo "DEL PODER LEGISLATIVO", lo ocultamos visualmente
+    // Esta regex busca textos cortos en mayúsculas al final del string
+    // Es un parche visual, lo ideal es corregir la base de datos.
+    return html.replace(/<p><strong><span[^>]*>[A-ZÁÉÍÓÚÑ\s]{5,}<\/span><\/strong><\/p>$/i, '')
+  }
+  // ------------------------------------------
+
   useEffect(() => {
     const initReader = async () => {
       setLoading(true)
       
-      // A. Traemos el artículo seleccionado
+      // 1. Traemos el artículo seleccionado
       const { data: current, error } = await supabase
         .from('laws_db')
         .select('*')
@@ -29,41 +38,31 @@ export default function LawReader() {
         setLoading(false)
         return
       }
-
       setInitialLaw(current)
 
-      // B. Truco "Brutal": Traemos los siguientes 20 artículos del MISMO cuerpo legal
-      // Usamos el ID o un orden lógico. Como los IDs son UUID, es difícil ordenar.
-      // Haremos una búsqueda por texto aproximado del número de artículo para ordenarlos
-      // O mejor: Traemos por 'corpus' y filtramos en memoria (si no son demasiados)
-      // ESTRATEGIA OPTIMIZADA: Buscar por coincidencia de texto en corpus
-      
+      // 2. Traer vecinos del MISMO LIBRO EXACTO (usando corpus exacto)
+      // Como no unificamos libros, esto funciona perfecto para leer "Libro Segundo" de corrido.
       const { data: neighbors } = await supabase
         .from('laws_db')
         .select('*')
-        .eq('corpus', current.corpus)
-        .textSearch('search_text', `${current.article.split(' ')[0]}`, { config: 'simple' }) // Intento de traer cercanos
-        .limit(50) // Traemos un lote
+        .eq('corpus', current.corpus) // Mismo libro exacto
+        .textSearch('search_text', `${current.article.split(' ')[0]}`, { config: 'simple' }) 
+        .limit(40) 
       
-      // Como ordenar por "Art. 1, Art. 2" es difícil en SQL puro sin columnas numéricas,
-      // aquí implementamos un ordenador simple de JavaScript:
       let sorted = []
       if (neighbors) {
-          // Extraer número: "Art. 15" -> 15
           const getNum = (str) => parseInt(str.replace(/\D/g, '')) || 0
-          
           const targetNum = getNum(current.article)
           
-          // Filtramos y ordenamos: Queremos el actual y los siguientes
+          // Ordenamos por número de artículo
           sorted = neighbors
             .filter(a => getNum(a.article) >= targetNum)
             .sort((a, b) => getNum(a.article) - getNum(b.article))
       }
 
-      // Si el filtrado falló (por formatos raros), al menos mostramos el actual
       if (sorted.length === 0) sorted = [current]
       
-      // Eliminamos duplicados visuales si el actual está en la lista
+      // Eliminamos duplicados por ID
       const unique = sorted.filter((v,i,a)=>a.findIndex(v2=>(v2.id===v.id))===i)
       
       setArticles(unique)
@@ -73,24 +72,6 @@ export default function LawReader() {
     initReader()
   }, [id])
 
-  // Función para cargar más (Simulación de scroll infinito)
-  const loadMore = async () => {
-    if (articles.length === 0) return
-    const lastArticle = articles[articles.length - 1]
-    const lastNum = parseInt(lastArticle.article.replace(/\D/g, '')) || 0
-    
-    // Traer el siguiente lote
-    // Nota: Esto es imperfecto sin una columna numérica real en DB, pero funciona visualmente
-    // para la demo. Idealmente agregarías columna 'order_index' en Supabase.
-  }
-
-  const copyText = (text, itemId) => {
-    navigator.clipboard.writeText(text)
-    setCopiedId(itemId)
-    setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  // Clases dinámicas para tamaño de fuente
   const fontClasses = {
       'text-sm': 'prose-sm',
       'text-base': 'prose-base',
@@ -103,7 +84,7 @@ export default function LawReader() {
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-slate-800 font-serif pb-20">
       
-      {/* Header Flotante "Kindle Style" */}
+      {/* Header Flotante */}
       <header className="sticky top-0 z-30 bg-[#FDFBF7]/95 backdrop-blur border-b border-stone-200 px-4 py-3 flex items-center justify-between shadow-sm transition-all">
         <div className="flex items-center gap-3">
             <button onClick={() => navigate('/laws')} className="p-2 hover:bg-stone-200 rounded-full transition-colors text-stone-600">
@@ -115,52 +96,39 @@ export default function LawReader() {
             </div>
         </div>
         
-        <div className="flex items-center gap-1">
-            <button onClick={() => setFontSize(prev => prev === 'text-lg' ? 'text-xl' : 'text-lg')} className="p-2 text-stone-600 hover:bg-stone-200 rounded-full">
-                <Type size={20} />
-            </button>
-        </div>
+        <button onClick={() => setFontSize(prev => prev === 'text-lg' ? 'text-xl' : 'text-lg')} className="p-2 text-stone-600 hover:bg-stone-200 rounded-full">
+            <Type size={20} />
+        </button>
       </header>
 
-      {/* Contenedor del Documento Continuo */}
+      {/* Documento Continuo */}
       <main className="max-w-3xl mx-auto px-6 md:px-12 py-8">
         
         {articles.map((item, index) => (
-            <article key={item.id} className={`mb-16 animate-fade-in relative group ${index !== 0 ? 'border-t border-stone-200 pt-10' : ''}`}>
+            <article key={item.id} className={`mb-12 animate-fade-in relative group ${index !== 0 ? 'border-t border-stone-200 pt-12 mt-4' : ''}`}>
                 
-                {/* Número de Artículo (Anchor Visual) */}
-                <div className="flex justify-between items-baseline mb-4">
-                    <h2 className="text-2xl font-bold text-amber-700 font-sans tracking-tight">
+                {/* Cabecera del Artículo */}
+                <div className="mb-4">
+                    <h2 className="text-2xl font-bold text-amber-800 font-sans tracking-tight inline-block mr-3">
                         {item.article}
                     </h2>
-                    
-                    {/* Botones de acción por artículo (aparecen al hover) */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                        <button onClick={() => copyText(`${item.article}\n${item.content}`, item.id)} className="p-1.5 text-stone-400 hover:text-amber-600 hover:bg-amber-50 rounded">
-                            {copiedId === item.id ? <Check size={16} /> : <Copy size={16} />}
-                        </button>
-                    </div>
+                    {/* Renderizamos el título solo si existe y no es basura */}
+                    {item.title && item.title.length > 2 && (
+                        <span className="text-lg font-semibold text-stone-600 italic block mt-1" dangerouslySetInnerHTML={{__html: item.title}}></span>
+                    )}
                 </div>
-
-                {/* Título del Artículo (si tiene) */}
-                {item.title && (
-                    <h3 className="text-lg font-semibold text-stone-600 mb-4 italic" dangerouslySetInnerHTML={{__html: item.title}}></h3>
-                )}
 
                 {/* Contenido Texto */}
                 <div 
-                    className={`prose prose-stone ${fontClasses[fontSize]} max-w-none text-justify leading-relaxed text-stone-800`}
-                    dangerouslySetInnerHTML={{ __html: item.content }}
+                    className={`prose prose-stone ${fontClasses[fontSize]} max-w-none text-justify leading-relaxed text-stone-900`}
+                    // Usamos la función cleanContentVisual para intentar ocultar la basura al final
+                    dangerouslySetInnerHTML={{ __html: cleanContentVisual(item.content) }}
                 />
             </article>
         ))}
 
-        {/* Footer del Documento */}
-        <div className="mt-20 py-10 border-t-2 border-dashed border-stone-300 text-center">
-            <p className="text-stone-500 italic mb-4">Fin de la sección cargada</p>
-            <button className="px-6 py-2 bg-stone-800 text-white rounded-full hover:bg-stone-700 transition-colors font-sans text-sm font-bold">
-                Cargar siguientes artículos
-            </button>
+        <div className="mt-20 py-10 border-t-2 border-dashed border-stone-300 text-center opacity-60">
+            <p className="text-stone-500 italic text-sm">Fin de la vista previa</p>
         </div>
 
       </main>
