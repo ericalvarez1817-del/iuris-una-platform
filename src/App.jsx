@@ -10,6 +10,10 @@ import ErrorBoundary from './components/ErrorBoundary'
 // 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES
 import { initNotifications } from './lib/notifications'
 
+// 4. IMPORTAMOS EL SCRIPT DE CARGA MASIVA (NUEVO)
+// Asegúrate de que el archivo 'uploadLaws.js' esté en la carpeta src
+import { subirLeyes } from './uploadLaws'
+
 // COMPONENTE DE SEGURIDAD
 import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/layout/AppLayout'
@@ -99,6 +103,17 @@ function AppRoutes() {
 // APP PRINCIPAL
 // ============================================================
 function App() {
+  // EFECTO PARA SUBIDA DE LEYES (SOLO USAR UNA VEZ)
+  useEffect(() => {
+    // --- INSTRUCCIONES DE USO ---
+    // 1. Descomenta la línea de abajo (quita las //)
+    // 2. Guarda el archivo y mira la consola del navegador
+    // 3. Cuando diga "✅ Éxito", vuelve a comentar la línea inmediatamente.
+    
+    // subirLeyes(); 
+    
+  }, [])
+
   return (
     <ErrorBoundary>
       <BrowserRouter>
