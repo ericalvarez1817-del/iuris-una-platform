@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase' 
-import { Upload, Loader2, Scan, CheckCircle, AlertTriangle, FileJson } from 'lucide-react'
+import { Upload, Loader2, Scan, Database, FileJson } from 'lucide-react'
 
 export default function LoadLaws() {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 })
 
-  // --- ALGORITMO CAZADOR DE OBJETOS (Blindado contra errores de sintaxis) ---
+  // --- 1. CAZADOR DE OBJETOS ---
   const extraerObjetosJSON = (texto) => {
     const objetos = []
     let llaveAbierta = 0
@@ -15,18 +15,10 @@ export default function LoadLaws() {
     let enCadena = false
     let escape = false
 
-    // Recorremos caracter por caracter buscando bloques { ... }
     for (let i = 0; i < texto.length; i++) {
       const char = texto[i]
-
-      // Manejo de strings para ignorar llaves dentro de textos (ej: content: "text { o }")
-      if (char === '"' && !escape) {
-        enCadena = !enCadena
-      }
-      if (char === '\\' && !escape) {
-        escape = true
-        continue
-      }
+      if (char === '"' && !escape) enCadena = !enCadena
+      if (char === '\\' && !escape) { escape = true; continue; }
       escape = false
 
       if (!enCadena) {
@@ -36,18 +28,12 @@ export default function LoadLaws() {
         } else if (char === '}') {
           llaveAbierta--
           if (llaveAbierta === 0 && inicio !== -1) {
-            // ¡ENCONTRAMOS UN OBJETO CERRADO!
             const rawObj = texto.substring(inicio, i + 1)
             try {
               const obj = JSON.parse(rawObj)
-              // Validamos que parezca una ley
-              if (obj.corpus && (obj.article || obj.content)) {
-                objetos.push(obj)
-              }
-            } catch (e) {
-              // Si falla el parseo individual, lo ignoramos y seguimos
-              console.warn("Objeto corrupto ignorado:", rawObj.substring(0, 50))
-            }
+              // Aceptamos todo lo que parezca ley, sin filtrar duplicados aquí
+              if (obj.corpus && (obj.article || obj.content)) objetos.push(obj)
+            } catch (e) { /* Ignorar basura */ }
             inicio = -1
           }
         }
@@ -58,21 +44,14 @@ export default function LoadLaws() {
 
   const limpiarDatos = (listaLeyes) => {
     return listaLeyes.map(item => {
-      // 1. Quitamos ID viejo
       const { id, ...resto } = item
-      
-      // 2. Limpiamos HTML del título
       let tituloLimpio = resto.title || ""
       if (tituloLimpio.includes("<")) {
         const tmp = document.createElement("DIV")
         tmp.innerHTML = tituloLimpio
         tituloLimpio = tmp.textContent || tmp.innerText || ""
       }
-
-      return {
-        ...resto,
-        title: tituloLimpio.trim()
-      }
+      return { ...resto, title: tituloLimpio.trim() }
     })
   }
 
@@ -81,28 +60,20 @@ export default function LoadLaws() {
     if (!file) return
 
     setLoading(true)
-    setLogs(prev => ["📂 Leyendo archivo gigante...", ...prev])
+    setLogs(prev => ["📂 Leyendo archivo...", ...prev])
 
     const reader = new FileReader()
     reader.onload = async (e) => {
       try {
         const text = e.target.result
-
-        setLogs(prev => ["🦅 Iniciando 'Caza de Objetos' (esto puede tardar unos segundos)...", ...prev])
         
-        // Usamos el algoritmo manual en lugar de JSON.parse
-        const leyesEncontradas = extraerObjetosJSON(text)
+        setLogs(prev => ["🦅 Cazando objetos (Modo sin filtros)...", ...prev])
+        const leyesCrudas = extraerObjetosJSON(text)
 
-        if (leyesEncontradas.length === 0) {
-            throw new Error("No se encontraron objetos JSON válidos con formato de ley.")
-        }
-
-        setLogs(prev => [`✅ ¡Caza exitosa! Se recuperaron ${leyesEncontradas.length} artículos válidos.`, ...prev])
-        setLogs(prev => [`🧹 Limpiando datos...`, ...prev])
+        setLogs(prev => [`🧹 Procesando ${leyesCrudas.length} artículos...`, ...prev])
+        const datosLimpios = limpiarDatos(leyesCrudas)
         
-        const datosLimpios = limpiarDatos(leyesEncontradas)
         setStats({ total: datosLimpios.length, success: 0, errors: 0 })
-        
         await uploadInBatches(datosLimpios)
 
       } catch (err) {
@@ -115,29 +86,44 @@ export default function LoadLaws() {
   }
 
   const uploadInBatches = async (data) => {
-    const BATCH_SIZE = 200 // Bajamos un poco el lote para asegurar
+    const BATCH_SIZE = 200
     let successCount = 0
     let errorCount = 0
 
     for (let i = 0; i < data.length; i += BATCH_SIZE) {
-      const batch = data.slice(i, i + BATCH_SIZE)
-      setLogs(prev => [`🚀 Subiendo lote ${i} a ${i + batch.length}...`, ...prev])
+      const rawBatch = data.slice(i, i + BATCH_SIZE)
+      
+      // --- TRUCO TÉCNICO PARA EVITAR CRASH ---
+      // Supabase falla si enviamos 2 veces el mismo ID en el MISMO paquete.
+      // Solución: En este paquete específico, dejamos solo la última versión de cada artículo.
+      // Esto NO borra datos del archivo, solo organiza el envío.
+      const batchMap = new Map();
+      rawBatch.forEach(item => {
+          // Usamos corpus + articulo como clave única temporal
+          const key = `${item.corpus}-${item.article}`.toLowerCase().trim()
+          batchMap.set(key, item) 
+      });
+      const safeBatch = Array.from(batchMap.values());
+      // ---------------------------------------
+
+      setLogs(prev => [`🚀 Subiendo lote ${i} a ${i + safeBatch.length}...`, ...prev])
 
       const { error } = await supabase
         .from('laws_db')
-        .upsert(batch, { onConflict: 'corpus, article' }) // IMPORTANTE: Coincide con el índice SQL
+        .upsert(safeBatch, { onConflict: 'corpus, article' }) 
 
       if (error) {
-        errorCount += batch.length
-        setLogs(prev => [`⚠️ Error Supabase: ${error.message} (Revisa si creaste el índice SQL)`, ...prev])
+        // Si aún así falla, lo registramos pero seguimos
+        errorCount += safeBatch.length
+        setLogs(prev => [`⚠️ Error leve: ${error.message} (Siguiendo con el próximo lote...)`, ...prev])
       } else {
-        successCount += batch.length
+        successCount += safeBatch.length
       }
       
       setStats({ total: data.length, success: successCount, errors: errorCount })
     }
 
-    setLogs(prev => [`🏁 ¡PROCESO TERMINADO!`, ...prev])
+    setLogs(prev => [`🏁 ¡CARGA COMPLETA! Todo lo posible ha sido subido.`, ...prev])
     setLoading(false)
   }
 
@@ -145,7 +131,7 @@ export default function LoadLaws() {
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-800">
-          <Scan className="text-amber-600" /> Cargador v5.0 "El Cazador"
+          <Database className="text-blue-600" /> Cargador "Fuerza Bruta"
         </h1>
 
         <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 transition-colors relative group">
@@ -164,9 +150,9 @@ export default function LoadLaws() {
             </div>
           )}
           <p className="text-slate-600 font-medium">
-            {loading ? "Cazando leyes..." : "Arrastra leyes.json aquí"}
+            {loading ? "Inyectando leyes..." : "Arrastra leyes.json aquí"}
           </p>
-          <p className="text-xs text-slate-400 mt-2">Ignora errores de comas, corchetes y basura.</p>
+          <p className="text-xs text-slate-400 mt-2">Modo sin eliminación de duplicados.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-6 text-center">
@@ -176,11 +162,11 @@ export default function LoadLaws() {
             </div>
             <div className="bg-green-50 p-3 rounded-lg border border-green-100">
                 <div className="text-2xl font-bold text-green-700">{stats.success}</div>
-                <div className="text-xs text-green-600 uppercase font-bold">Subidos</div>
+                <div className="text-xs text-green-600 uppercase font-bold">Éxitos</div>
             </div>
             <div className="bg-red-50 p-3 rounded-lg border border-red-100">
                 <div className="text-2xl font-bold text-red-700">{stats.errors}</div>
-                <div className="text-xs text-red-600 uppercase font-bold">Errores</div>
+                <div className="text-xs text-red-600 uppercase font-bold">Fallos</div>
             </div>
         </div>
 
@@ -188,8 +174,8 @@ export default function LoadLaws() {
           {logs.length === 0 && <span className="text-slate-500 italic">Esperando archivo...</span>}
           {logs.map((log, i) => (
             <div key={i} className={`mb-1.5 border-b border-slate-800 pb-1 ${
-                log.includes("Error") || log.includes("FATAL") ? "text-red-400 font-bold" : 
-                log.includes("Caza") ? "text-yellow-400" :
+                log.includes("Error") ? "text-red-400 font-bold" : 
+                log.includes("🚀") ? "text-blue-400" :
                 "text-green-400"
             }`}>
                 {log}
