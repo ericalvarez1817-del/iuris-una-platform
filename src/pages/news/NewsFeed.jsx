@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { 
   Newspaper, Calendar, ChevronRight, Search, 
@@ -23,69 +23,84 @@ export default function NewsFeed() {
   const [filter, setFilter] = useState('TODAS')
   const [selectedNews, setSelectedNews] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  
   const [session, setSession] = useState(null)
+  // Usamos useRef para acceder a la sesión actual dentro del listener sin causar re-renders
+  const sessionRef = useRef(null) 
 
   // Formulario
   const [form, setForm] = useState({ title: '', content: '', category: 'UNA', image: null })
   const [uploading, setUploading] = useState(false)
 
+  // 1. EFECTO DE INICIALIZACIÓN (Solo carga al montar)
   useEffect(() => {
-    // 1. Obtener sesión inicial
+    // A. Obtener sesión
     supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session)
+        sessionRef.current = session
     })
     
-    // 2. Cargar noticias iniciales
+    // B. Escuchar cambios de sesión (Login/Logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session)
+        sessionRef.current = session
+    })
+
+    // C. Cargar noticias iniciales
     fetchNews()
 
-    // 3. SUSCRIPCIÓN EN TIEMPO REAL (El Oído) 👂
+    // D. SUSCRIPCIÓN EN TIEMPO REAL (El Oído) 👂
     const channel = supabase.channel('news_updates')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'news' }, (payload) => {
           
-          // A. Refrescamos la lista visualmente
+          // Refrescamos la lista visualmente
           fetchNews()
 
-          // B. NOTIFICACIÓN (Solo si no fui yo el que publicó)
+          // NOTIFICACIÓN (Usando la referencia para no causar bucles)
           const newArticle = payload.new
+          const currentUserId = sessionRef.current?.user?.id
           
-          // Verificamos session?.user?.id para no notificarnos a nosotros mismos
-          if (session && newArticle.author_id !== session.user.id) {
+          // Solo notificamos si el autor NO soy yo
+          if (currentUserId && newArticle.author_id !== currentUserId) {
               sendNotification("📰 IURIS NEWS", newArticle.title)
-          } else if (!session) {
-              // Si por alguna razón la sesión no cargó aún, notificamos igual por seguridad
+          } else if (!currentUserId) {
               sendNotification("📰 IURIS NEWS", newArticle.title)
           }
       })
       .subscribe()
 
     // Limpieza al salir
-    return () => supabase.removeChannel(channel)
+    return () => {
+        supabase.removeChannel(channel)
+        subscription.unsubscribe()
+    }
 
-  }, [session]) // Dependemos de session para saber si soy yo el autor
+  }, []) // <--- ARRAY VACÍO: ESTO EVITA EL BUCLE INFINITO DE 1000 ERRORES
 
   const fetchNews = async () => {
-    // Nota: Quitamos setLoading(true) global para que no parpadee al recibir actualizaciones en vivo
     const { data, error } = await supabase
       .from('news')
       .select('*, profiles(full_name, is_reporter, avatar_url)')
       .order('created_at', { ascending: false })
     
-    if (error) console.error(error)
+    if (error) console.error("Error cargando noticias:", error)
     else setNews(data || [])
     
-    setLoading(false) // Solo quitamos el loading inicial
+    setLoading(false)
   }
 
   const handlePublish = async () => {
-      if(!form.title || !form.content) return alert("Faltan datos")
+      if(!form.title || !form.content) return alert("Faltan datos por completar")
+      if(!session) return alert("No hay sesión activa")
+
       setUploading(true)
       try {
           let imgUrl = null
+          
+          // Subida de imagen corregida con extensión
           if (form.image) {
-              // CORRECCIÓN IMPORTANTE: Agregar extensión al archivo
-              // Muchos servidores rechazan archivos sin extensión, causando "Failed to fetch"
               const fileExt = form.image.name.split('.').pop()
-              const fileName = `news_${Date.now()}.${fileExt}`
+              const fileName = `news_${Date.now()}.${fileExt}` // Nombre seguro con extensión
 
               const { error: uploadError } = await supabase.storage
                 .from('news-images')
@@ -97,23 +112,23 @@ export default function NewsFeed() {
               imgUrl = data.publicUrl
           }
 
+          // Inserción en base de datos
           const { error } = await supabase.from('news').insert({
               title: form.title,
               content: form.content,
-              category: form.category,
+              category: form.category, // Aquí toma el valor correcto del estado
               image_url: imgUrl,
               author_id: session.user.id
           })
 
           if (error) throw error
           
-          alert("¡Noticia publicada!")
+          alert("¡Noticia publicada correctamente!")
           setShowModal(false)
-          setForm({ title: '', content: '', category: 'UNA', image: null })
-          // fetchNews se llama automáticamente por el listener en tiempo real
+          setForm({ title: '', content: '', category: 'UNA', image: null }) // Reset del formulario
 
       } catch (e) {
-          console.error("Error detallado:", e) // Log para ver la causa real (ej: AdBlock)
+          console.error("Error publicando:", e)
           alert("Error: " + e.message)
       }
       setUploading(false)
@@ -238,12 +253,11 @@ export default function NewsFeed() {
         )}
       </div>
 
-      {/* MODAL LECTURA (ESTILO ABC COLOR / PRENSA PROFESIONAL) */}
+      {/* MODAL LECTURA */}
       {selectedNews && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
           <div className="bg-white dark:bg-slate-900 w-full h-full sm:h-[90vh] sm:max-w-xl sm:rounded-2xl overflow-y-auto relative shadow-2xl flex flex-col">
             
-            {/* Botón cerrar flotante */}
             <button 
                 onClick={() => setSelectedNews(null)} 
                 className="absolute top-4 right-4 z-50 p-2 bg-black/50 backdrop-blur-md text-white rounded-full hover:bg-black/70 transition"
@@ -251,12 +265,10 @@ export default function NewsFeed() {
                 <X size={24}/>
             </button>
             
-            {/* Imagen Principal (Hero Image) */}
             {selectedNews.image_url && (
               <div className="w-full h-64 sm:h-72 shrink-0 relative">
                   <img src={selectedNews.image_url} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                  {/* Categoría sobre la imagen */}
                   <div className="absolute bottom-4 left-4">
                         <span className={`inline-block px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest text-white ${
                             selectedNews.category === 'UNA' ? 'bg-blue-600' : 
@@ -268,10 +280,7 @@ export default function NewsFeed() {
               </div>
             )}
 
-            {/* Contenido del Artículo */}
             <div className={`p-6 sm:p-8 ${!selectedNews.image_url ? 'pt-16' : ''} flex-1`}>
-               
-               {/* Metadata Autor */}
                <div className="flex items-center gap-3 mb-6 border-b border-slate-100 dark:border-slate-800 pb-4">
                     <img src={selectedNews.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${selectedNews.profiles?.full_name}&background=random`} className="w-10 h-10 rounded-full object-cover"/>
                     <div>
@@ -283,18 +292,15 @@ export default function NewsFeed() {
                     </div>
                </div>
 
-              {/* Título Principal */}
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-6 leading-tight tracking-tight">
                 {selectedNews.title}
               </h1>
 
-              {/* CUERPO DEL TEXTO (OPTIMIZADO PARA LECTURA MOVIL) */}
               <div className="text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-300 font-serif whitespace-pre-line break-words text-justify hyphens-auto">
                 {selectedNews.content}
               </div>
             </div>
 
-            {/* Footer de lectura */}
             <div className="p-6 border-t border-slate-100 dark:border-slate-800 text-center">
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Fin del Artículo</p>
                 <div className="flex justify-center mt-2">
@@ -316,7 +322,12 @@ export default function NewsFeed() {
                 <div className="space-y-3">
                     <input className="input-modern" placeholder="Título impactante" onChange={e => setForm({...form, title: e.target.value})}/>
                     
-                    <select className="input-modern" onChange={e => setForm({...form, category: e.target.value})}>
+                    {/* AQUÍ ESTÁ LA SOLUCIÓN DEL SELECT: value={form.category} */}
+                    <select 
+                        className="input-modern" 
+                        value={form.category} 
+                        onChange={e => setForm({...form, category: e.target.value})}
+                    >
                         <option value="UNA">🏛️ Institucional UNA</option>
                         <option value="JURIDICO">⚖️ Jurídico</option>
                         <option value="SOCIALES">🎉 Sociales / Eventos</option>
