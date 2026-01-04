@@ -26,26 +26,26 @@ export default function Dashboard() {
   const [progresoData, setProgresoData] = useState('Cargando...') 
   // ------------------------------------
 
-  // --- 2. CONFIGURACIÓN DEL TOUR GUIADO (CORREGIDO) ---
+  // --- 2. CONFIGURACIÓN DEL TOUR GUIADO (MEJORADO V3) ---
   useEffect(() => {
-    const hasSeenTour = localStorage.getItem('iuris_walkthrough_v2') // Cambié a v2 para que te vuelva a salir
+    // Cambié la key a 'v3' para que el tour se reinicie y veas los cambios
+    const hasSeenTour = localStorage.getItem('iuris_walkthrough_v3')
     
     if (!hasSeenTour) {
       const driverObj = driver({
         showProgress: true,
         allowClose: false,
         animate: true,
-        // Textos de botones más amigables
+        // Configuración de textos
         nextBtnText: 'Siguiente →',
         prevBtnText: '← Atrás',
-        doneBtnText: '¡Avanzar!',
-        // Pasos detallados según tus correcciones
+        doneBtnText: '¡Comenzar!',
         steps: [
           { 
             element: '#tour-welcome', 
             popover: { 
               title: '👋 Bienvenido a IURIS UNA', 
-              description: 'Tu centro de comando académico. Aquí gestionas tu vida universitaria, finanzas y herramientas.', 
+              description: 'Tu centro de comando académico. Aquí gestionas tu vida universitaria, finanzas y herramientas legales.', 
               side: "bottom", 
               align: 'center' 
             } 
@@ -54,7 +54,7 @@ export default function Dashboard() {
             element: '#tour-gpa', 
             popover: { 
               title: '🎓 Tu Promedio (GPA)', 
-              description: 'Visualiza tu calificación actual en tiempo real. Toca "Calcular" para proyectar qué notas necesitas para alcanzar el cuadro de honor.', 
+              description: 'Tu calificación en tiempo real. Usa el botón "Calcular" para proyectar qué notas necesitas en tus finales.', 
               side: "bottom", 
               align: 'start' 
             } 
@@ -62,8 +62,8 @@ export default function Dashboard() {
           { 
             element: '#tour-market', 
             popover: { 
-              title: '💼 Mercado de Servicios', 
-              description: '¿Buscas u ofreces servicios? Aquí puedes contratar gestores, solicitar tipeos o publicitar tus habilidades profesionales para ganar dinero.', 
+              title: '🤝 Mercado de Servicios', 
+              description: 'Conecta talento. Aquí puedes ofrecer tus servicios (gestoría, tipeo, pasantías) o contratar a otros colegas.', 
               side: "top", 
               align: 'start' 
             } 
@@ -71,8 +71,8 @@ export default function Dashboard() {
           { 
             element: '#tour-library', 
             popover: { 
-              title: '📚 Librería Digital & Resúmenes', 
-              description: 'Compra y venta de material académico. Encuentra libros usados, códigos y los mejores resúmenes hechos por otros alumnos.', 
+              title: '📚 Librería IURIS', 
+              description: 'El espacio para comercializar conocimiento. Compra y vende libros usados, códigos y resúmenes de calidad.', 
               side: "top", 
               align: 'start' 
             } 
@@ -80,8 +80,8 @@ export default function Dashboard() {
           { 
             element: '#tour-chat', 
             popover: { 
-              title: '👥 Comunidad Verificada', 
-              description: 'Grupos de estudio y networking exclusivo para estudiantes de la UNA. Conecta con tus futuros colegas.', 
+              title: '⚖️ Comunidad UNA', 
+              description: 'Networking real. Únete a grupos de estudio verificados y debate con tus futuros colegas.', 
               side: "top", 
               align: 'start' 
             } 
@@ -89,22 +89,33 @@ export default function Dashboard() {
           { 
             element: '#tour-agenda', 
             popover: { 
-              title: '📅 Agenda de Plazos', 
-              description: 'No pierdas ningún examen. Tus parciales y fechas límite se ordenan automáticamente por urgencia aquí.', 
+              title: '📅 Agenda Inteligente', 
+              description: 'Tus parciales y entregas se ordenan automáticamente por urgencia. Nunca pierdas una fecha límite.', 
               side: "top", 
               align: 'start' 
+            } 
+          },
+          // --- NUEVO PASO: LEYES (En la barra inferior) ---
+          { 
+            element: '#nav-laws', 
+            popover: { 
+              title: '🏛️ Leyes al Instante', 
+              description: 'Tu herramienta más potente. Accede a todos los códigos y leyes vigentes con un lector optimizado para estudiantes.', 
+              side: "top", 
+              align: 'center' 
             } 
           }
         ],
         onDestroyStarted: () => {
-           localStorage.setItem('iuris_walkthrough_v2', 'true')
+           localStorage.setItem('iuris_walkthrough_v3', 'true')
            driverObj.destroy();
         },
       });
 
+      // Delay para asegurar que todo cargó antes de iniciar
       setTimeout(() => {
         driverObj.drive();
-      }, 1500); // Un poco más de delay para asegurar carga visual
+      }, 1500); 
     }
   }, [])
   // ----------------------------------------
@@ -322,7 +333,7 @@ export default function Dashboard() {
           </div>
           <div className="z-10">
             <h4 className="font-bold text-slate-800 dark:text-slate-100">Mercado UNA</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Compra, Venta & Servicios</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Servicios & Contrataciones</p>
           </div>
         </div>
       </Link>
@@ -336,7 +347,7 @@ export default function Dashboard() {
           </div>
           <div className="z-10">
             <h4 className="font-bold text-slate-800 dark:text-slate-100">Librería IURIS</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Ebooks & Resúmenes</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Compra/Venta de Libros</p>
           </div>
         </div>
       </Link>

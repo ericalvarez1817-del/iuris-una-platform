@@ -26,7 +26,8 @@ export default function AppLayout() {
               <span className="text-[10px] font-bold">Progreso</span>
             </Link>
 
-            <Link to="/laws" className={`flex flex-col items-center gap-1 min-w-[50px] transition-colors ${location.pathname.includes('/laws') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
+            {/* --- AQUI AGREGAMOS EL ID 'nav-laws' PARA EL TOUR --- */}
+            <Link id="nav-laws" to="/laws" className={`flex flex-col items-center gap-1 min-w-[50px] transition-colors ${location.pathname.includes('/laws') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
               <Scale size={22} strokeWidth={location.pathname.includes('/laws') ? 2.5 : 2} />
               <span className="text-[10px] font-bold">Leyes</span>
             </Link>
