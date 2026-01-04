@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase' 
-import { Upload, Loader2, Trash2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Upload, Loader2, Wrench, CheckCircle, AlertTriangle } from 'lucide-react'
 
 export default function LoadLaws() {
   const [loading, setLoading] = useState(false)
@@ -9,10 +9,10 @@ export default function LoadLaws() {
 
   const limpiarDatos = (rawJson) => {
     return rawJson.map(item => {
-      // 1. Quitamos ID viejo
+      // 1. Quitamos ID viejo (cn-1) para que Supabase cree uno nuevo
       const { id, ...resto } = item
       
-      // 2. Limpiamos HTML del título
+      // 2. Limpiamos HTML sucio del título
       let tituloLimpio = resto.title || ""
       if (tituloLimpio.includes("<")) {
         const tmp = document.createElement("DIV")
@@ -39,31 +39,50 @@ export default function LoadLaws() {
       try {
         let text = e.target.result.trim()
 
-        // --- CORRECCIÓN AUTOMÁTICA DE FORMATO ---
-        // Si el usuario copió objetos sueltos sin los corchetes [ ], los agregamos.
-        if (text.startsWith('{')) {
-             setLogs(prev => ["🔧 Detectado formato sin corchetes. Reparando automáticamente...", ...prev])
-             // Agregamos corchete al inicio
-             text = `[${text}`
-             // Si termina en '}', le agregamos el de cierre ']'
-             if (text.endsWith('}')) {
-                 text = `${text}]`
-             }
+        // === CIRUGÍA DE JSON (REPARACIÓN AUTOMÁTICA) ===
+        setLogs(prev => ["🔧 Analizando estructura del archivo...", ...prev])
+
+        // 1. Si pegaste array junto a array (ej: ][), los unimos con coma
+        if (text.match(/\]\s*\[/)) {
+            setLogs(prev => ["🩹 Reparando: Se detectaron múltiples arrays pegados. Uniendo...", ...prev])
+            text = text.replace(/\]\s*\[/g, ',')
         }
-        // -----------------------------------------
+
+        // 2. Si pegaste objetos sueltos sin coma (ej: } {), agregamos la coma
+        // Esta es la causa de tu error en la línea 2040
+        if (text.match(/\}\s*[\r\n]+\s*\{/)) {
+            setLogs(prev => ["🩹 Reparando: Faltaban comas entre los artículos. Agregando...", ...prev])
+            text = text.replace(/(\})\s*([\r\n]+)\s*(\{)/g, '$1,$2$3')
+        }
+
+        // 3. Aseguramos que empiece y termine con corchetes [ ... ]
+        if (!text.startsWith('[')) {
+             setLogs(prev => ["🩹 Reparando: Agregando corchete de inicio '['...", ...prev])
+             text = '[' + text
+        }
+        if (!text.endsWith(']')) {
+             // A veces queda una coma suelta al final (ej: ...},)
+             if (text.trim().endsWith(',')) {
+                 text = text.trim().slice(0, -1) 
+             }
+             setLogs(prev => ["🩹 Reparando: Agregando corchete final ']'...", ...prev])
+             text = text + ']'
+        }
+        // ===============================================
 
         const rawJson = JSON.parse(text)
         
-        setLogs(prev => [`🧹 Limpiando datos (quitando IDs viejos y HTML)...`, ...prev])
+        setLogs(prev => [`✅ JSON Reparado y Leído. Procesando ${rawJson.length} artículos...`, ...prev])
         const cleanJson = limpiarDatos(rawJson)
         
         setStats({ total: cleanJson.length, success: 0, errors: 0 })
-        setLogs(prev => [`✅ Datos listos y validados. Detectados ${cleanJson.length} artículos.`, ...prev])
         
         await uploadInBatches(cleanJson)
+
       } catch (err) {
         console.error(err)
-        setLogs(prev => [`❌ Error FATAL al leer JSON: ${err.message}. Asegúrate de que el archivo empiece con '[' y termine con ']'.`, ...prev])
+        // Si falla aquí, es que el archivo está muy roto
+        setLogs(prev => [`❌ Error FATAL: ${err.message}. Revisa la consola (F12) para más detalles.`, ...prev])
         setLoading(false)
       }
     }
@@ -101,7 +120,7 @@ export default function LoadLaws() {
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-800">
-          <Upload className="text-amber-600" /> Cargador Masivo "Anti-Crash"
+          <Wrench className="text-amber-600" /> Reparador y Cargador de Leyes
         </h1>
 
         <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 transition-colors relative group">
@@ -120,19 +139,19 @@ export default function LoadLaws() {
             </div>
           )}
           <p className="text-slate-600 font-medium">
-            {loading ? "Procesando leyes..." : "Arrastra tu archivo laws.json aquí"}
+            {loading ? "Reparando y subiendo..." : "Arrastra tu archivo leyes.json aquí"}
           </p>
-          <p className="text-xs text-slate-400 mt-2">El sistema corregirá errores de formato automáticamente.</p>
+          <p className="text-xs text-slate-400 mt-2">Corregirá automáticamente la falta de comas y corchetes.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-6 text-center">
             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
                 <div className="text-2xl font-bold text-blue-700">{stats.total}</div>
-                <div className="text-xs text-blue-600 uppercase font-bold">Total Artículos</div>
+                <div className="text-xs text-blue-600 uppercase font-bold">Total</div>
             </div>
             <div className="bg-green-50 p-3 rounded-lg border border-green-100">
                 <div className="text-2xl font-bold text-green-700">{stats.success}</div>
-                <div className="text-xs text-green-600 uppercase font-bold">Subidos OK</div>
+                <div className="text-xs text-green-600 uppercase font-bold">Subidos</div>
             </div>
             <div className="bg-red-50 p-3 rounded-lg border border-red-100">
                 <div className="text-2xl font-bold text-red-700">{stats.errors}</div>
@@ -144,8 +163,8 @@ export default function LoadLaws() {
           {logs.length === 0 && <span className="text-slate-500 italic">Esperando archivo...</span>}
           {logs.map((log, i) => (
             <div key={i} className={`mb-1.5 border-b border-slate-800 pb-1 ${
-                log.includes("Error") || log.includes("FATAL") ? "text-red-400 font-bold" : 
-                log.includes("🔧") ? "text-yellow-400" :
+                log.includes("FATAL") ? "text-red-400 font-bold" : 
+                log.includes("🩹") || log.includes("🔧") ? "text-yellow-400" :
                 "text-green-400"
             }`}>
                 {log}
