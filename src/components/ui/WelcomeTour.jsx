@@ -1,52 +1,66 @@
 import { useState, useEffect } from 'react'
-import { X, ChevronRight, BookOpen, ShoppingBag, MessageCircle, Rocket, Zap, ShieldCheck } from 'lucide-react'
+import { X, ChevronRight, Check, Search, PlusCircle, BookOpen, User, DollarSign, Wallet } from 'lucide-react'
 
 export default function WelcomeTour() {
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState(0)
-  const [isClosing, setIsClosing] = useState(false)
 
   useEffect(() => {
-    // Verificamos si ya vio el tutorial (puedes cambiar la key si quieres resetearlo para todos)
-    const hasSeen = localStorage.getItem('iuris_tutorial_brutal_v1')
+    // Cambiamos la key para que te vuelva a salir al probarlo
+    const hasSeen = localStorage.getItem('iuris_guide_v3')
     if (!hasSeen) {
-      // Pequeño delay para que la animación de entrada se sienta mejor al cargar la app
       setTimeout(() => setIsOpen(true), 500)
     }
   }, [])
 
   const handleClose = () => {
-    setIsClosing(true) // Activa animación de salida
-    setTimeout(() => {
-      setIsOpen(false)
-      localStorage.setItem('iuris_tutorial_brutal_v1', 'true')
-    }, 400) // Espera a que termine la animación
+    setIsOpen(false)
+    localStorage.setItem('iuris_guide_v3', 'true')
   }
 
+  // --- CONTENIDO DEL TUTORIAL (Instrucciones Reales) ---
   const steps = [
     {
-      pretitle: "TODO EN UNO",
-      title: "Tu Arsenal Jurídico",
-      desc: "Leyes actualizadas, jurisprudencia y herramientas académicas en tu bolsillo. Deja los libros pesados en casa.",
-      icon: <BookOpen size={64} className="text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" />,
-      bgGradient: "from-indigo-500 to-blue-600",
-      shadowColor: "shadow-indigo-500/50"
+      title: "1. ¿Cómo gano dinero?",
+      instruction: "Ve a la pestaña Mercado (icono de Bolsa). Busca el botón flotante (+) y selecciona 'Publicar'. Sube tus resúmenes en PDF.",
+      proTip: "Los resúmenes de 'Derecho Romano' se venden más rápido.",
+      icon: <DollarSign size={40} className="text-emerald-500" />,
+      visual: (
+        <div className="flex gap-4 items-center justify-center opacity-80 mt-2">
+            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><Wallet size={20}/></div>
+            <div className="h-0.5 w-8 bg-slate-300"></div>
+            <div className="p-2 bg-indigo-600 rounded-full text-white"><PlusCircle size={24}/></div>
+        </div>
+      )
     },
     {
-      pretitle: "ECONOMÍA REAL",
-      title: "Mercado IURIS",
-      desc: "Convierte tus resúmenes en dinero real. Compra, vende y ofrece servicios a otros estudiantes de la UNA.",
-      icon: <ShoppingBag size={64} className="text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" />,
-      bgGradient: "from-emerald-500 to-teal-600",
-      shadowColor: "shadow-emerald-500/50"
+      title: "2. Leer leyes sin internet",
+      instruction: "En la sección Leyes (Balanza), usa el buscador. Escribe 'Código Civil' o 'Divorcio'. Al abrir una ley, ajusta el tamaño de letra con el botón 'T'.",
+      proTip: "Usa el Modo Oscuro (Luna) para leer de noche sin cansar la vista.",
+      icon: <BookOpen size={40} className="text-indigo-500" />,
+      visual: (
+        <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg w-full max-w-[200px] mx-auto mt-2 flex items-center gap-2">
+            <Search size={16} className="text-slate-400"/>
+            <div className="h-2 w-20 bg-slate-300 rounded-full"></div>
+        </div>
+      )
     },
     {
-      pretitle: "COMUNIDAD VIP",
-      title: "Círculo de Confianza",
-      desc: "Chats encriptados y verificados. Sin spam, solo networking de alto nivel con tus futuros colegas.",
-      icon: <ShieldCheck size={64} className="text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" />,
-      bgGradient: "from-violet-600 to-fuchsia-600",
-      shadowColor: "shadow-violet-500/50"
+      title: "3. Tu Perfil y Reputación",
+      instruction: "Tu foto y nombre son tu marca. Si vendes buenos apuntes, tu reputación subirá y aparecerás como 'Vendedor Verificado'.",
+      proTip: "Ve a la pestaña Perfil para cambiar tu foto y retirar tus ganancias.",
+      icon: <User size={40} className="text-amber-500" />,
+      visual: (
+        <div className="flex items-center gap-3 justify-center mt-2">
+            <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <div className="space-y-1">
+                <div className="h-2 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                <div className="flex gap-1">
+                    {[1,2,3,4,5].map(i => <div key={i} className="w-3 h-3 bg-amber-400 rounded-full"></div>)}
+                </div>
+            </div>
+        </div>
+      )
     }
   ]
 
@@ -61,96 +75,66 @@ export default function WelcomeTour() {
   if (!isOpen) return null
 
   return (
-    <div className={`fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 transition-all duration-500 ${isClosing ? 'opacity-0 backdrop-blur-none' : 'opacity-100 backdrop-blur-md bg-black/40'}`}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
       
-      {/* CARD PRINCIPAL */}
-      <div 
-        className={`
-          w-full sm:max-w-md bg-white dark:bg-slate-900 
-          rounded-t-[2.5rem] sm:rounded-[2.5rem] 
-          shadow-2xl overflow-hidden relative 
-          transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1)
-          ${isClosing ? 'translate-y-full sm:scale-95' : 'translate-y-0 sm:scale-100'}
-        `}
-      >
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-800 transition-all">
         
-        {/* FONDO ANIMADO DECORATIVO */}
-        <div className={`absolute top-0 left-0 w-full h-64 bg-gradient-to-br ${steps[step].bgGradient} transition-colors duration-700 ease-in-out`}>
-            {/* Círculos decorativos flotantes (Efecto Bokeh) */}
-            <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-            <div className="absolute bottom-0 left-[-10%] w-48 h-48 bg-black/10 rounded-full blur-2xl"></div>
+        {/* Header con Progreso */}
+        <div className="bg-slate-50 dark:bg-slate-950 px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                PASO {step + 1} DE {steps.length}
+            </span>
+            <button onClick={handleClose} className="text-slate-400 hover:text-red-500 transition">
+                <X size={20}/>
+            </button>
         </div>
 
-        {/* BOTÓN CERRAR */}
-        <button 
-          onClick={handleClose} 
-          className="absolute top-5 right-5 z-20 p-2 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/30 transition border border-white/10"
-        >
-          <X size={20} />
-        </button>
-
-        {/* CONTENIDO */}
-        <div className="relative z-10 pt-16 pb-8 px-8 flex flex-col items-center text-center">
-          
-          {/* ICONO CON EFECTO 3D */}
-          <div className={`
-             mb-8 p-6 rounded-3xl 
-             bg-white/10 backdrop-blur-xl border border-white/20 
-             shadow-xl ${steps[step].shadowColor} 
-             transform transition-all duration-500 hover:scale-110 hover:-rotate-3
-             animate-in zoom-in-50 duration-500
-          `} key={step + 'icon'}>
-            {steps[step].icon}
-          </div>
-
-          {/* TEXTOS ANIMADOS */}
-          <div className="space-y-3 min-h-[140px]" key={step + 'text'}>
-            <span className="text-[10px] font-black tracking-[0.2em] text-white/80 uppercase animate-in slide-in-from-bottom-2 fade-in duration-500 delay-75">
-                {steps[step].pretitle}
-            </span>
-            <h2 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight animate-in slide-in-from-bottom-3 fade-in duration-500 delay-100">
-              {steps[step].title}
-            </h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed animate-in slide-in-from-bottom-4 fade-in duration-500 delay-200">
-              {steps[step].desc}
-            </p>
-          </div>
-
-          {/* CONTROLES INFERIORES */}
-          <div className="w-full mt-8 flex items-center justify-between">
+        {/* Cuerpo del Tutorial */}
+        <div className="p-8 flex flex-col items-center text-center">
             
-            {/* INDICADORES DE PÁGINA (Dots) */}
-            <div className="flex gap-2">
-              {steps.map((_, i) => (
-                <div 
-                  key={i} 
-                  className={`h-2.5 rounded-full transition-all duration-500 ${i === step ? `w-8 bg-gradient-to-r ${steps[step].bgGradient}` : 'w-2.5 bg-slate-200 dark:bg-slate-800'}`} 
-                />
-              ))}
+            {/* Icono Principal Animado */}
+            <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl shadow-sm animate-in zoom-in duration-300" key={step}>
+                {steps[step].icon}
             </div>
 
-            {/* BOTÓN PRINCIPAL */}
-            <button 
-              onClick={nextStep} 
-              className={`
-                group relative px-8 py-3.5 rounded-full 
-                bg-slate-900 dark:bg-white text-white dark:text-slate-900 
-                font-bold text-sm shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 
-                transition-all duration-300 flex items-center gap-2 overflow-hidden
-              `}
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                {step === steps.length - 1 ? 'DESPEGAR' : 'SIGUIENTE'} 
-                {step === steps.length - 1 ? <Rocket size={18} className="animate-bounce" /> : <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform"/>}
-              </span>
-              
-              {/* Brillo al pasar el mouse */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
-            </button>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white mb-4 leading-tight">
+                {steps[step].title}
+            </h2>
 
-          </div>
+            {/* Instrucción Clara */}
+            <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed mb-6 font-medium">
+                {steps[step].instruction}
+            </p>
+
+            {/* Representación Visual Mini */}
+            <div className="w-full mb-6 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
+                {steps[step].visual}
+            </div>
+
+            {/* TIP PRO BOX */}
+            <div className="w-full bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-3 rounded-lg flex gap-3 text-left">
+                <div className="shrink-0 mt-0.5">
+                    <div className="w-4 h-4 bg-indigo-500 rounded-full flex items-center justify-center text-[10px] text-white font-bold">i</div>
+                </div>
+                <p className="text-xs text-indigo-800 dark:text-indigo-300">
+                    <span className="font-bold block mb-0.5">Tip Pro:</span>
+                    {steps[step].proTip}
+                </p>
+            </div>
 
         </div>
+
+        {/* Footer Botón */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800">
+            <button 
+                onClick={nextStep}
+                className="w-full py-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-sm hover:scale-[1.02] active:scale-95 transition flex items-center justify-center gap-2 shadow-lg"
+            >
+                {step === steps.length - 1 ? '¡ENTENDIDO, A ESTUDIAR!' : 'SIGUIENTE'}
+                {step === steps.length - 1 ? <Check size={18}/> : <ChevronRight size={18}/>}
+            </button>
+        </div>
+
       </div>
     </div>
   )
