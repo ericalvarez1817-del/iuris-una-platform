@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import useTheme from '../../hooks/useTheme'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
+
 // Importamos los iconos
 import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag, Book, Newspaper, MessageCircle } from 'lucide-react'
-import { useNavigate, Link, useLocation } from 'react-router-dom'
 
 // --- NUEVA IMPORTACIÓN: BOTÓN DE NOTIFICACIONES ---
 import NotificationButton from '../../components/ui/NotificationButton'
+
+// --- NUEVA IMPORTACIÓN: TUTORIAL DE BIENVENIDA ---
+import WelcomeTour from '../../components/ui/WelcomeTour'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -76,7 +80,6 @@ export default function Dashboard() {
 
     if (error) {
       console.error('Error al cargar la agenda:', error)
-      // CORRECCIÓN PRINCIPAL: Evitamos asignar null para prevenir el crash en el renderizado
       setProximaTarea({
         titulo: 'Error de conexión',
         descripcion: 'No se pudo cargar la agenda',
@@ -151,6 +154,10 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 pb-24 transition-colors duration-300">
       
+      {/* --- INTEGRACIÓN TUTORIAL: SOLO APARECE LA PRIMERA VEZ --- */}
+      <WelcomeTour />
+      {/* -------------------------------------------------------- */}
+
       {/* HEADER */}
       <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
         <div>
@@ -160,7 +167,7 @@ export default function Dashboard() {
         
         <div className="flex gap-2 items-center">
           
-          {/* --- AQUÍ ESTÁ EL BOTÓN DE NOTIFICACIONES --- */}
+          {/* BOTÓN DE NOTIFICACIONES */}
           <NotificationButton />
 
           {/* BOTÓN TEMA */}
