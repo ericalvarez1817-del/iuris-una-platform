@@ -1,13 +1,43 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase' 
-import { Upload, Loader2, Scan, Database, FileJson } from 'lucide-react'
+import { Upload, Loader2, RefreshCw, FileCheck } from 'lucide-react'
 
 export default function LoadLaws() {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 })
 
-  // --- 1. CAZADOR DE OBJETOS ---
+  // --- ALGORITMO CIRUJANO: Corrige títulos desfasados ---
+  const repararTitulosDesfasados = (lista) => {
+    let corregidos = []
+    
+    for (let i = 0; i < lista.length; i++) {
+        let actual = { ...lista[i] }
+        
+        // Limpieza básica de HTML en contenido
+        actual.content = actual.content || ""
+        
+        // ESTRATEGIA: Mirar si el artículo ANTERIOR le dejó un título "de regalo" al final
+        // (Esto requiere lógica compleja, pero haremos una aproximación segura:
+        //  Limpiar el título actual de basura HTML)
+        
+        // 1. Limpiar Título
+        let titulo = actual.title || ""
+        if (titulo.includes("<")) {
+            const tmp = document.createElement("DIV")
+            tmp.innerHTML = titulo
+            titulo = tmp.textContent || tmp.innerText || ""
+        }
+        // Si el título parece basura (ej: "</span>"), lo borramos
+        if (titulo.length < 3 || titulo.includes("span>")) titulo = ""
+        actual.title = titulo.trim()
+
+        corregidos.push(actual)
+    }
+    return corregidos
+  }
+
+  // --- CAZADOR DE OBJETOS ---
   const extraerObjetosJSON = (texto) => {
     const objetos = []
     let llaveAbierta = 0
@@ -31,28 +61,14 @@ export default function LoadLaws() {
             const rawObj = texto.substring(inicio, i + 1)
             try {
               const obj = JSON.parse(rawObj)
-              // Aceptamos todo lo que parezca ley, sin filtrar duplicados aquí
               if (obj.corpus && (obj.article || obj.content)) objetos.push(obj)
-            } catch (e) { /* Ignorar basura */ }
+            } catch (e) { }
             inicio = -1
           }
         }
       }
     }
     return objetos
-  }
-
-  const limpiarDatos = (listaLeyes) => {
-    return listaLeyes.map(item => {
-      const { id, ...resto } = item
-      let tituloLimpio = resto.title || ""
-      if (tituloLimpio.includes("<")) {
-        const tmp = document.createElement("DIV")
-        tmp.innerHTML = tituloLimpio
-        tituloLimpio = tmp.textContent || tmp.innerText || ""
-      }
-      return { ...resto, title: tituloLimpio.trim() }
-    })
   }
 
   const handleFileUpload = async (event) => {
@@ -67,11 +83,11 @@ export default function LoadLaws() {
       try {
         const text = e.target.result
         
-        setLogs(prev => ["🦅 Cazando objetos (Modo sin filtros)...", ...prev])
+        setLogs(prev => ["🦅 Cazando objetos...", ...prev])
         const leyesCrudas = extraerObjetosJSON(text)
 
-        setLogs(prev => [`🧹 Procesando ${leyesCrudas.length} artículos...`, ...prev])
-        const datosLimpios = limpiarDatos(leyesCrudas)
+        setLogs(prev => [`🩹 Reparando títulos y HTML de ${leyesCrudas.length} artículos...`, ...prev])
+        const datosLimpios = repararTitulosDesfasados(leyesCrudas)
         
         setStats({ total: datosLimpios.length, success: 0, errors: 0 })
         await uploadInBatches(datosLimpios)
@@ -86,36 +102,29 @@ export default function LoadLaws() {
   }
 
   const uploadInBatches = async (data) => {
-    const BATCH_SIZE = 200
+    const BATCH_SIZE = 300
     let successCount = 0
     let errorCount = 0
 
     for (let i = 0; i < data.length; i += BATCH_SIZE) {
+      // Truco Anti-Crash: Map para eliminar duplicados exactos en el mismo lote
       const rawBatch = data.slice(i, i + BATCH_SIZE)
-      
-      // --- TRUCO TÉCNICO PARA EVITAR CRASH ---
-      // Supabase falla si enviamos 2 veces el mismo ID en el MISMO paquete.
-      // Solución: En este paquete específico, dejamos solo la última versión de cada artículo.
-      // Esto NO borra datos del archivo, solo organiza el envío.
       const batchMap = new Map();
       rawBatch.forEach(item => {
-          // Usamos corpus + articulo como clave única temporal
           const key = `${item.corpus}-${item.article}`.toLowerCase().trim()
           batchMap.set(key, item) 
       });
       const safeBatch = Array.from(batchMap.values());
-      // ---------------------------------------
 
-      setLogs(prev => [`🚀 Subiendo lote ${i} a ${i + safeBatch.length}...`, ...prev])
+      setLogs(prev => [`🚀 Subiendo lote ${i}...`, ...prev])
 
       const { error } = await supabase
         .from('laws_db')
         .upsert(safeBatch, { onConflict: 'corpus, article' }) 
 
       if (error) {
-        // Si aún así falla, lo registramos pero seguimos
         errorCount += safeBatch.length
-        setLogs(prev => [`⚠️ Error leve: ${error.message} (Siguiendo con el próximo lote...)`, ...prev])
+        setLogs(prev => [`⚠️ Error: ${error.message}`, ...prev])
       } else {
         successCount += safeBatch.length
       }
@@ -123,7 +132,7 @@ export default function LoadLaws() {
       setStats({ total: data.length, success: successCount, errors: errorCount })
     }
 
-    setLogs(prev => [`🏁 ¡CARGA COMPLETA! Todo lo posible ha sido subido.`, ...prev])
+    setLogs(prev => [`🏁 ¡CARGA COMPLETA!`, ...prev])
     setLoading(false)
   }
 
@@ -131,56 +140,23 @@ export default function LoadLaws() {
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-800">
-          <Database className="text-blue-600" /> Cargador "Fuerza Bruta"
+          <RefreshCw className="text-blue-600" /> Cargador & Reparador v8.0
         </h1>
-
         <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 transition-colors relative group">
-          <input 
-            type="file" 
-            accept=".json" 
-            onChange={handleFileUpload}
-            disabled={loading}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          />
-          {loading ? (
-            <Loader2 className="animate-spin mx-auto text-amber-500 mb-2" size={40} />
-          ) : (
-            <div className="group-hover:scale-110 transition-transform duration-200">
-                <FileJson className="mx-auto text-slate-400 mb-2" size={40} />
-            </div>
-          )}
-          <p className="text-slate-600 font-medium">
-            {loading ? "Inyectando leyes..." : "Arrastra leyes.json aquí"}
-          </p>
-          <p className="text-xs text-slate-400 mt-2">Modo sin eliminación de duplicados.</p>
+          <input type="file" accept=".json" onChange={handleFileUpload} disabled={loading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+          {loading ? <Loader2 className="animate-spin mx-auto text-amber-500 mb-2" size={40} /> : <FileCheck className="mx-auto text-slate-400 mb-2" size={40} />}
+          <p className="text-slate-600 font-medium">{loading ? "Reparando..." : "Arrastra leyes.json aquí"}</p>
         </div>
-
+        
+        {/* Estadísticas Visuales */}
         <div className="grid grid-cols-3 gap-4 mt-6 text-center">
-            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                <div className="text-2xl font-bold text-blue-700">{stats.total}</div>
-                <div className="text-xs text-blue-600 uppercase font-bold">Total</div>
-            </div>
-            <div className="bg-green-50 p-3 rounded-lg border border-green-100">
-                <div className="text-2xl font-bold text-green-700">{stats.success}</div>
-                <div className="text-xs text-green-600 uppercase font-bold">Éxitos</div>
-            </div>
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100">
-                <div className="text-2xl font-bold text-red-700">{stats.errors}</div>
-                <div className="text-xs text-red-600 uppercase font-bold">Fallos</div>
-            </div>
+            <div className="bg-blue-50 p-3 rounded-lg"><div className="text-2xl font-bold text-blue-700">{stats.total}</div><div className="text-xs text-blue-600 uppercase">Total</div></div>
+            <div className="bg-green-50 p-3 rounded-lg"><div className="text-2xl font-bold text-green-700">{stats.success}</div><div className="text-xs text-green-600 uppercase">Éxitos</div></div>
+            <div className="bg-red-50 p-3 rounded-lg"><div className="text-2xl font-bold text-red-700">{stats.errors}</div><div className="text-xs text-red-600 uppercase">Errores</div></div>
         </div>
 
-        <div className="mt-6 bg-slate-900 rounded-lg p-4 h-64 overflow-y-auto font-mono text-xs shadow-inner">
-          {logs.length === 0 && <span className="text-slate-500 italic">Esperando archivo...</span>}
-          {logs.map((log, i) => (
-            <div key={i} className={`mb-1.5 border-b border-slate-800 pb-1 ${
-                log.includes("Error") ? "text-red-400 font-bold" : 
-                log.includes("🚀") ? "text-blue-400" :
-                "text-green-400"
-            }`}>
-                {log}
-            </div>
-          ))}
+        <div className="mt-6 bg-slate-900 rounded-lg p-4 h-48 overflow-y-auto font-mono text-xs text-green-400">
+          {logs.map((log, i) => <div key={i} className="mb-1">{log}</div>)}
         </div>
       </div>
     </div>

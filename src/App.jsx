@@ -11,7 +11,6 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { initNotifications } from './lib/notifications'
 
 // 4. IMPORTAMOS LA PANTALLA DE CARGA
-// Asegúrate de que src/pages/LoadLaws.jsx exista
 import LoadLaws from './pages/LoadLaws'
 
 // COMPONENTE DE SEGURIDAD
@@ -28,13 +27,17 @@ import GpaCalculator from './pages/tools/GpaCalculator'
 import NoteGenerator from './pages/tools/NoteGenerator'
 import Lexicon from './pages/tools/Lexicon'
 import LawsSearch from './pages/laws/LawsSearch'
-import LawDetails from './pages/laws/LawDetails'
 import Marketplace from './pages/tools/marketplace/Marketplace'
 import Library from './pages/tools/Library'
 import NewsFeed from './pages/news/NewsFeed'
 import ChatList from './pages/chat/ChatList'
 import ChatRoom from './pages/chat/ChatRoom'
 import AdminPanel from './pages/tools/marketplace/AdminPanel'
+
+// --- ACTUALIZACIÓN IMPORTANTE: NUEVO VISOR DE LEYES ---
+// Usamos LawReader en lugar de LawDetails para la lectura continua
+import LawReader from './pages/laws/LawReader' 
+// -----------------------------------------------------
 
 // ============================================================
 // COMPONENTE INTERNO: Lógica de Rutas Web
@@ -71,7 +74,6 @@ function AppRoutes() {
         <Route path="/" element={<Login />} />
         
         {/* --- RUTA SECRETA DE CARGA --- */}
-        {/* CORREGIDO: Se usa <LoadLaws /> sin el .jsx */}
         <Route path="/secret-upload" element={<LoadLaws />} />
 
         <Route element={<ProtectedRoute />}>
@@ -89,8 +91,12 @@ function AppRoutes() {
             <Route path="/news" element={<NewsFeed />} />
             <Route path="/chat" element={<ChatList />} />
             <Route path="/chat/:roomId" element={<ChatRoom />} />
+            
+            {/* Rutas de Leyes Actualizadas */}
             <Route path="/laws" element={<LawsSearch />} />
-            <Route path="/laws/:id" element={<LawDetails />} />
+            {/* Ahora usamos el LawReader (lectura continua) al abrir una ley */}
+            <Route path="/laws/:id" element={<LawReader />} />
+            
           </Route>
         </Route>
       </Routes>
