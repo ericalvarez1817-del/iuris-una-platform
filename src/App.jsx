@@ -10,9 +10,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 // 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES
 import { initNotifications } from './lib/notifications'
 
-// 4. IMPORTAMOS EL SCRIPT DE CARGA MASIVA (NUEVO)
-// Asegúrate de que el archivo 'uploadLaws.js' esté en la carpeta src
-import { subirLeyes } from './uploadLaws'
+// (ELIMINADO: import { subirLeyes }... para evitar el error de memoria)
 
 // COMPONENTE DE SEGURIDAD
 import ProtectedRoute from './components/ProtectedRoute'
@@ -44,27 +42,21 @@ function AppRoutes() {
 
   // 1. INICIALIZAR NOTIFICACIONES WEB
   useEffect(() => {
-    // Esto pedirá permiso al navegador (Chrome/Safari)
     initNotifications(); 
   }, []);
 
-  // 2. ESCUCHA DE SESIÓN (OPTIMIZADA)
+  // 2. ESCUCHA DE SESIÓN
   useEffect(() => {
-    // Supabase maneja el retorno de Google automáticamente en Web
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`🔐 Evento Web: ${event}`);
       
       if (event === 'SIGNED_IN' && session) {
-        // CORRECCIÓN IMPORTANTE:
-        // Solo redirigimos al dashboard si el usuario está estrictamente en el Login ('/')
-        // Si ya está en '/market' u otra ruta, NO lo movemos.
         if (window.location.pathname === '/') {
            navigate('/dashboard', { replace: true });
         }
       }
       
       if (event === 'SIGNED_OUT') {
-        // Al salir, sí forzamos ir al login
         navigate('/');
       }
     });
@@ -103,16 +95,13 @@ function AppRoutes() {
 // APP PRINCIPAL
 // ============================================================
 function App() {
-  // EFECTO PARA SUBIDA DE LEYES (SOLO USAR UNA VEZ)
+  // --- PUERTA TRASERA PARA CARGA MANUAL ---
+  // Esto expone 'window.supabase' en la consola para que puedas
+  // pegar el script de carga sin romper la build de la app.
   useEffect(() => {
-    // --- INSTRUCCIONES DE USO ---
-    // 1. Descomenta la línea de abajo (quita las //)
-    // 2. Guarda el archivo y mira la consola del navegador
-    // 3. Cuando diga "✅ Éxito", vuelve a comentar la línea inmediatamente.
-    
-    // subirLeyes(); 
-    
-  }, [])
+    window.supabase = supabase;
+    console.log("🔓 SUPABASE LISTO EN CONSOLA: Usa 'window.supabase' para subir tus leyes.");
+  }, []);
 
   return (
     <ErrorBoundary>
