@@ -12,8 +12,6 @@ import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag
 // Botón de notificaciones
 import NotificationButton from '../../components/ui/NotificationButton'
 
-// (Hemos retirado WelcomeTour para usar el Driver.js que es más pro)
-
 export default function Dashboard() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -28,24 +26,26 @@ export default function Dashboard() {
   const [progresoData, setProgresoData] = useState('Cargando...') 
   // ------------------------------------
 
-  // --- 2. CONFIGURACIÓN DEL TOUR GUIADO ---
+  // --- 2. CONFIGURACIÓN DEL TOUR GUIADO (CORREGIDO) ---
   useEffect(() => {
-    // Verificamos si ya vio el tour
-    const hasSeenTour = localStorage.getItem('iuris_walkthrough_v1')
+    const hasSeenTour = localStorage.getItem('iuris_walkthrough_v2') // Cambié a v2 para que te vuelva a salir
     
     if (!hasSeenTour) {
       const driverObj = driver({
         showProgress: true,
         allowClose: false,
+        animate: true,
+        // Textos de botones más amigables
         nextBtnText: 'Siguiente →',
         prevBtnText: '← Atrás',
-        doneBtnText: '¡Entendido!',
+        doneBtnText: '¡Avanzar!',
+        // Pasos detallados según tus correcciones
         steps: [
           { 
             element: '#tour-welcome', 
             popover: { 
-              title: 'Bienvenido a IURIS UNA', 
-              description: 'Tu plataforma todo-en-uno. Vamos a dar un recorrido rápido.', 
+              title: '👋 Bienvenido a IURIS UNA', 
+              description: 'Tu centro de comando académico. Aquí gestionas tu vida universitaria, finanzas y herramientas.', 
               side: "bottom", 
               align: 'center' 
             } 
@@ -53,8 +53,8 @@ export default function Dashboard() {
           { 
             element: '#tour-gpa', 
             popover: { 
-              title: 'Tu Promedio (GPA)', 
-              description: 'Tu calificación en tiempo real. Toca aquí para calcular cuánto necesitas para pasar.', 
+              title: '🎓 Tu Promedio (GPA)', 
+              description: 'Visualiza tu calificación actual en tiempo real. Toca "Calcular" para proyectar qué notas necesitas para alcanzar el cuadro de honor.', 
               side: "bottom", 
               align: 'start' 
             } 
@@ -62,8 +62,8 @@ export default function Dashboard() {
           { 
             element: '#tour-market', 
             popover: { 
-              title: 'Mercado Estudiantil', 
-              description: 'Vende tus resúmenes o compra libros. ¡Genera ingresos extra!', 
+              title: '💼 Mercado de Servicios', 
+              description: '¿Buscas u ofreces servicios? Aquí puedes contratar gestores, solicitar tipeos o publicitar tus habilidades profesionales para ganar dinero.', 
               side: "top", 
               align: 'start' 
             } 
@@ -71,8 +71,8 @@ export default function Dashboard() {
           { 
             element: '#tour-library', 
             popover: { 
-              title: 'Librería y Leyes', 
-              description: 'Accede a todas las leyes paraguayas actualizadas, incluso sin internet.', 
+              title: '📚 Librería Digital & Resúmenes', 
+              description: 'Compra y venta de material académico. Encuentra libros usados, códigos y los mejores resúmenes hechos por otros alumnos.', 
               side: "top", 
               align: 'start' 
             } 
@@ -80,8 +80,8 @@ export default function Dashboard() {
           { 
             element: '#tour-chat', 
             popover: { 
-              title: 'Comunidad', 
-              description: 'Grupos de estudio verificados. Solo estudiantes reales de la UNA.', 
+              title: '👥 Comunidad Verificada', 
+              description: 'Grupos de estudio y networking exclusivo para estudiantes de la UNA. Conecta con tus futuros colegas.', 
               side: "top", 
               align: 'start' 
             } 
@@ -89,24 +89,22 @@ export default function Dashboard() {
           { 
             element: '#tour-agenda', 
             popover: { 
-              title: 'Tu Agenda', 
-              description: 'No pierdas ningún parcial. Aquí verás tus fechas límites más próximas.', 
+              title: '📅 Agenda de Plazos', 
+              description: 'No pierdas ningún examen. Tus parciales y fechas límite se ordenan automáticamente por urgencia aquí.', 
               side: "top", 
               align: 'start' 
             } 
           }
         ],
         onDestroyStarted: () => {
-           // Guardamos que ya lo vio al cerrar
-           localStorage.setItem('iuris_walkthrough_v1', 'true')
+           localStorage.setItem('iuris_walkthrough_v2', 'true')
            driverObj.destroy();
         },
       });
 
-      // Pequeño delay para asegurar que la interfaz cargó
       setTimeout(() => {
         driverObj.drive();
-      }, 1000);
+      }, 1500); // Un poco más de delay para asegurar carga visual
     }
   }, [])
   // ----------------------------------------
@@ -114,10 +112,8 @@ export default function Dashboard() {
   useEffect(() => {
     getUser()
     getAverage()
-    // --- LLAMADA A LAS FUNCIONES AL CARGAR EL DASHBOARD ---
     fetchProximaTarea()
     fetchProgresoData() 
-    // -----------------------------------------------------------
   }, [location])
 
   const getUser = async () => {
@@ -153,7 +149,6 @@ export default function Dashboard() {
     navigate('/')
   }
 
-  // --- FUNCIÓN: CARGA EL PRÓXIMO EVENTO DE LA AGENDA ---
   const fetchProximaTarea = async () => {
     setLoadingAgenda(true)
     const { data, error } = await supabase
@@ -186,7 +181,6 @@ export default function Dashboard() {
     setLoadingAgenda(false)
   }
   
-  // --- FUNCIÓN: CARGA DATOS DEL TRACKER DE PROGRESO ---
   const fetchProgresoData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -247,19 +241,13 @@ export default function Dashboard() {
         </div>
         
         <div className="flex gap-2 items-center">
-          
-          {/* BOTÓN DE NOTIFICACIONES */}
           <NotificationButton />
-
-          {/* BOTÓN TEMA */}
           <button 
             onClick={toggleTheme}
             className="p-2 bg-white dark:bg-slate-800 text-slate-400 dark:text-yellow-400 border border-slate-200 dark:border-slate-700 rounded-full hover:bg-slate-100 transition shadow-sm"
           >
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
-
-          {/* BOTÓN SALIR */}
           <button 
             onClick={handleLogout}
             className="p-2 bg-white dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 rounded-full hover:text-red-600 hover:border-red-200 transition shadow-sm"
@@ -301,7 +289,6 @@ export default function Dashboard() {
       <Link to="/chat" id="tour-chat" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-green-400 group relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-green-50 dark:to-green-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          
           <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
             <MessageCircle size={24} />
           </div>
@@ -316,7 +303,6 @@ export default function Dashboard() {
       <Link to="/news" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-blue-400 group relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-blue-50 dark:to-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          
           <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
             <Newspaper size={24} />
           </div>
@@ -331,7 +317,6 @@ export default function Dashboard() {
       <Link to="/market" id="tour-market" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-indigo-400 group relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-indigo-50 dark:to-indigo-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          
           <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
             <ShoppingBag size={24} />
           </div>
@@ -346,7 +331,6 @@ export default function Dashboard() {
       <Link to="/library" id="tour-library" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-fuchsia-400 group relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-fuchsia-50 dark:to-fuchsia-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          
           <div className="bg-gradient-to-br from-fuchsia-500 to-pink-600 p-3 rounded-lg text-white shadow-md group-hover:scale-110 transition-transform z-10">
             <Book size={24} />
           </div>
