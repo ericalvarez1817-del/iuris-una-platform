@@ -10,7 +10,9 @@ import ErrorBoundary from './components/ErrorBoundary'
 // 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES
 import { initNotifications } from './lib/notifications'
 
-// (ELIMINADO: import { subirLeyes }... para evitar el error de memoria)
+// 4. IMPORTAMOS LA PANTALLA DE CARGA (¡NUEVO!)
+// Asegúrate de haber creado el archivo src/pages/LoadLaws.jsx como te dije antes
+import LoadLaws from './pages/LoadLaws'
 
 // COMPONENTE DE SEGURIDAD
 import ProtectedRoute from './components/ProtectedRoute'
@@ -67,6 +69,10 @@ function AppRoutes() {
   return (
       <Routes>
         <Route path="/" element={<Login />} />
+        
+        {/* --- RUTA SECRETA DE CARGA --- */}
+        {/* Entra aquí manualmente escribiendo /secret-upload en tu navegador */}
+        <Route path="/secret-upload" element={<LoadLaws />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
@@ -95,14 +101,6 @@ function AppRoutes() {
 // APP PRINCIPAL
 // ============================================================
 function App() {
-  // --- PUERTA TRASERA PARA CARGA MANUAL ---
-  // Esto expone 'window.supabase' en la consola para que puedas
-  // pegar el script de carga sin romper la build de la app.
-  useEffect(() => {
-    window.supabase = supabase;
-    console.log("🔓 SUPABASE LISTO EN CONSOLA: Usa 'window.supabase' para subir tus leyes.");
-  }, []);
-
   return (
     <ErrorBoundary>
       <BrowserRouter>
