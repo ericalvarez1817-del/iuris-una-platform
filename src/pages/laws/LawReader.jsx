@@ -1,36 +1,51 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { ArrowLeft, Type, Copy, Check, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Type, Copy, Check, List } from 'lucide-react'
 
 export default function LawReader() {
-  const { id } = useParams()
+  const { id } = useParams() // El ID del artículo al que hiciste clic
   const navigate = useNavigate()
   
   const [articles, setArticles] = useState([]) 
   const [loading, setLoading] = useState(true)
-  const [initialLaw, setInitialLaw] = useState(null)
+  const [currentLawTitle, setCurrentLawTitle] = useState("")
   const [fontSize, setFontSize] = useState('text-lg')
+  const [copiedId, setCopiedId] = useState(null)
 
-  // --- FUNCIÓN DE LIMPIEZA VISUAL (PARCHE) ---
-  // Intenta ocultar el título del siguiente artículo si quedó pegado al final
+  // Referencia para controlar el scroll automático
+  const activeArticleRef = useRef(null)
+
+  // --- 1. FUNCIÓN DE LIMPIEZA AGRESIVA (El "Quitamanchas") ---
   const cleanContentVisual = (html) => {
     if (!html) return ""
-    // Si el texto termina con un título en mayúsculas tipo "DEL PODER LEGISLATIVO", lo ocultamos visualmente
-    // Esta regex busca textos cortos en mayúsculas al final del string
-    // Es un parche visual, lo ideal es corregir la base de datos.
-    return html.replace(/<p><strong><span[^>]*>[A-ZÁÉÍÓÚÑ\s]{5,}<\/span><\/strong><\/p>$/i, '')
-  }
-  // ------------------------------------------
+    
+    // Esta expresión regular busca patrones de títulos (SECCION, CAPITULO, TITULO, DE LAS...)
+    // que estén al final del texto, y los elimina.
+    let clean = html
+    
+    // 1. Eliminar "SECCION X", "CAPITULO Y", "TITULO Z" al final
+    clean = clean.replace(/<p>\s*(SECCI[ÓO]N|CAP[ÍI]TULO|T[ÍI]TULO|LIBRO)\s+[IVXLCDM]+\s*<\/p>\s*$/i, '')
+    
+    // 2. Eliminar textos en mayúsculas tipo título al final (ej: "DEL JUICIO POLITICO")
+    // Busca párrafos que contengan solo mayúsculas y espacios al final del string
+    clean = clean.replace(/<p>\s*(DE LOS|DE LAS|DEL|DE LA)\s+[A-ZÁÉÍÓÚÑ\s]+<\/p>\s*$/i, '')
+    
+    // 3. Limpieza extra para saltos de línea sobrantes
+    clean = clean.replace(/(<br\s*\/?>\s*)+$/, '')
 
+    return clean
+  }
+
+  // --- 2. CARGA DEL LIBRO COMPLETO (Modo PDF) ---
   useEffect(() => {
-    const initReader = async () => {
+    const fetchFullLaw = async () => {
       setLoading(true)
-      
-      // 1. Traemos el artículo seleccionado
+
+      // A. Primero averiguamos qué ley es (basado en el ID del artículo clicado)
       const { data: current, error } = await supabase
         .from('laws_db')
-        .select('*')
+        .select('corpus, article')
         .eq('id', id)
         .single()
 
@@ -38,39 +53,55 @@ export default function LawReader() {
         setLoading(false)
         return
       }
-      setInitialLaw(current)
+      
+      setCurrentLawTitle(current.corpus)
 
-      // 2. Traer vecinos del MISMO LIBRO EXACTO (usando corpus exacto)
-      // Como no unificamos libros, esto funciona perfecto para leer "Libro Segundo" de corrido.
-      const { data: neighbors } = await supabase
+      // B. Traemos TODOS los artículos de esa ley (Sin límite, para que sea un PDF completo)
+      const { data: allArticles } = await supabase
         .from('laws_db')
         .select('*')
-        .eq('corpus', current.corpus) // Mismo libro exacto
-        .textSearch('search_text', `${current.article.split(' ')[0]}`, { config: 'simple' }) 
-        .limit(40) 
+        .eq('corpus', current.corpus)
       
-      let sorted = []
-      if (neighbors) {
-          const getNum = (str) => parseInt(str.replace(/\D/g, '')) || 0
-          const targetNum = getNum(current.article)
-          
-          // Ordenamos por número de artículo
-          sorted = neighbors
-            .filter(a => getNum(a.article) >= targetNum)
-            .sort((a, b) => getNum(a.article) - getNum(b.article))
-      }
+      if (allArticles) {
+          // C. Ordenamiento Numérico Inteligente
+          // JavaScript ordena texto como "1, 10, 100, 2". Nosotros queremos "1, 2, 10, 100".
+          const getNum = (str) => {
+              // Extrae el primer número que encuentre: "Art. 224" -> 224
+              const match = str.match(/(\d+)/)
+              return match ? parseInt(match[0]) : 0
+          }
 
-      if (sorted.length === 0) sorted = [current]
+          const sorted = allArticles.sort((a, b) => getNum(a.article) - getNum(b.article))
+          setArticles(sorted)
+      }
       
-      // Eliminamos duplicados por ID
-      const unique = sorted.filter((v,i,a)=>a.findIndex(v2=>(v2.id===v.id))===i)
-      
-      setArticles(unique)
       setLoading(false)
     }
 
-    initReader()
-  }, [id])
+    fetchFullLaw()
+  }, [id]) // Se ejecuta cuando entras
+
+  // --- 3. AUTO-SCROLL (El Teletransportador) ---
+  useEffect(() => {
+    // Cuando terminan de cargar los artículos, buscamos el que tiene el ID activo
+    if (!loading && articles.length > 0 && activeArticleRef.current) {
+        // Hacemos scroll suave hasta el artículo
+        activeArticleRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [loading, articles, id])
+
+
+  // Utilidades
+  const copyText = (text, itemId) => {
+    // Limpiamos el HTML para copiar solo texto
+    const tmp = document.createElement("DIV")
+    tmp.innerHTML = text
+    const cleanText = tmp.textContent || tmp.innerText || ""
+    
+    navigator.clipboard.writeText(cleanText)
+    setCopiedId(itemId)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
 
   const fontClasses = {
       'text-sm': 'prose-sm',
@@ -84,15 +115,15 @@ export default function LawReader() {
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-slate-800 font-serif pb-20">
       
-      {/* Header Flotante */}
-      <header className="sticky top-0 z-30 bg-[#FDFBF7]/95 backdrop-blur border-b border-stone-200 px-4 py-3 flex items-center justify-between shadow-sm transition-all">
+      {/* Header Sticky */}
+      <header className="sticky top-0 z-30 bg-[#FDFBF7]/95 backdrop-blur border-b border-stone-200 px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
             <button onClick={() => navigate('/laws')} className="p-2 hover:bg-stone-200 rounded-full transition-colors text-stone-600">
                 <ArrowLeft size={20} />
             </button>
             <div className="flex flex-col">
-                <h1 className="text-xs font-bold uppercase tracking-widest text-stone-500">Leyendo</h1>
-                <span className="text-sm font-bold text-stone-900 truncate max-w-[200px]">{initialLaw?.corpus}</span>
+                <h1 className="text-xs font-bold uppercase tracking-widest text-stone-500">Documento Completo</h1>
+                <span className="text-sm font-bold text-stone-900 truncate max-w-[200px] md:max-w-md">{currentLawTitle}</span>
             </div>
         </div>
         
@@ -101,34 +132,69 @@ export default function LawReader() {
         </button>
       </header>
 
-      {/* Documento Continuo */}
+      {/* Cuerpo del Documento (Lista Infinita) */}
       <main className="max-w-3xl mx-auto px-6 md:px-12 py-8">
         
-        {articles.map((item, index) => (
-            <article key={item.id} className={`mb-12 animate-fade-in relative group ${index !== 0 ? 'border-t border-stone-200 pt-12 mt-4' : ''}`}>
-                
-                {/* Cabecera del Artículo */}
-                <div className="mb-4">
-                    <h2 className="text-2xl font-bold text-amber-800 font-sans tracking-tight inline-block mr-3">
-                        {item.article}
-                    </h2>
-                    {/* Renderizamos el título solo si existe y no es basura */}
-                    {item.title && item.title.length > 2 && (
-                        <span className="text-lg font-semibold text-stone-600 italic block mt-1" dangerouslySetInnerHTML={{__html: item.title}}></span>
+        {articles.map((item, index) => {
+            // Verificamos si este es el artículo seleccionado para marcarlo
+            const isActive = item.id === id 
+            
+            return (
+                <article 
+                    key={item.id} 
+                    // Si es el activo, le asignamos la referencia para el auto-scroll
+                    ref={isActive ? activeArticleRef : null}
+                    id={`art-${item.id}`}
+                    className={`
+                        mb-0 py-12 px-2 relative group transition-colors duration-1000
+                        ${isActive ? 'bg-amber-50/50 -mx-4 px-6 rounded-xl border border-amber-100 shadow-sm' : 'border-t border-stone-100'}
+                    `}
+                >
+                    {/* Ancla visual para saber dónde estamos */}
+                    {isActive && (
+                        <div className="absolute top-4 right-4 text-xs font-sans text-amber-600 font-bold bg-amber-100 px-2 py-1 rounded-full animate-pulse">
+                            LE YENDO AHORA
+                        </div>
                     )}
-                </div>
 
-                {/* Contenido Texto */}
-                <div 
-                    className={`prose prose-stone ${fontClasses[fontSize]} max-w-none text-justify leading-relaxed text-stone-900`}
-                    // Usamos la función cleanContentVisual para intentar ocultar la basura al final
-                    dangerouslySetInnerHTML={{ __html: cleanContentVisual(item.content) }}
-                />
-            </article>
-        ))}
+                    {/* Cabecera del Artículo */}
+                    <div className="mb-4 flex justify-between items-baseline">
+                        <div>
+                             <h2 className={`font-sans tracking-tight inline-block mr-3 font-bold ${isActive ? 'text-amber-700 text-3xl' : 'text-stone-700 text-2xl'}`}>
+                                {item.article}
+                            </h2>
+                            {item.title && item.title.length > 2 && (
+                                <div className="text-lg font-semibold text-stone-500 italic mt-1 leading-tight" dangerouslySetInnerHTML={{__html: item.title}}></div>
+                            )}
+                        </div>
 
-        <div className="mt-20 py-10 border-t-2 border-dashed border-stone-300 text-center opacity-60">
-            <p className="text-stone-500 italic text-sm">Fin de la vista previa</p>
+                         {/* Botón Copiar (visible al hover) */}
+                        <button 
+                            onClick={() => copyText(`${item.article}\n${item.content}`, item.id)} 
+                            className={`p-2 rounded-full transition-all ${isActive ? 'opacity-100 bg-white shadow-sm' : 'opacity-0 group-hover:opacity-100 hover:bg-stone-100'}`}
+                            title="Copiar texto"
+                        >
+                            {copiedId === item.id ? <Check size={18} className="text-green-600"/> : <Copy size={18} className="text-stone-400"/>}
+                        </button>
+                    </div>
+
+                    {/* Contenido Texto */}
+                    <div 
+                        className={`prose prose-stone ${fontClasses[fontSize]} max-w-none text-justify leading-relaxed text-stone-900`}
+                        // APLICAMOS LA LIMPIEZA VISUAL AQUÍ
+                        dangerouslySetInnerHTML={{ __html: cleanContentVisual(item.content) }}
+                    />
+
+                </article>
+            )
+        })}
+
+        {/* Final del Documento */}
+        <div className="mt-20 py-20 border-t-4 border-double border-stone-300 text-center">
+            <div className="inline-block p-4 rounded-full bg-stone-100 mb-4">
+                <List className="text-stone-400" />
+            </div>
+            <p className="text-stone-500 font-serif text-lg">Fin del Documento</p>
         </div>
 
       </main>
