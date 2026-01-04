@@ -82,8 +82,17 @@ export default function NewsFeed() {
       try {
           let imgUrl = null
           if (form.image) {
-              const fileName = `news_${Date.now()}`
-              await supabase.storage.from('news-images').upload(fileName, form.image)
+              // CORRECCIÓN IMPORTANTE: Agregar extensión al archivo
+              // Muchos servidores rechazan archivos sin extensión, causando "Failed to fetch"
+              const fileExt = form.image.name.split('.').pop()
+              const fileName = `news_${Date.now()}.${fileExt}`
+
+              const { error: uploadError } = await supabase.storage
+                .from('news-images')
+                .upload(fileName, form.image)
+              
+              if (uploadError) throw uploadError
+
               const { data } = supabase.storage.from('news-images').getPublicUrl(fileName)
               imgUrl = data.publicUrl
           }
@@ -104,6 +113,7 @@ export default function NewsFeed() {
           // fetchNews se llama automáticamente por el listener en tiempo real
 
       } catch (e) {
+          console.error("Error detallado:", e) // Log para ver la causa real (ej: AdBlock)
           alert("Error: " + e.message)
       }
       setUploading(false)
