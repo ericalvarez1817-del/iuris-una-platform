@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 
-// 1. IMPORTACIONES (Ya no necesitamos @capacitor/app)
+// 1. IMPORTACIONES
 import { supabase } from './lib/supabase'
 
-// 2. IMPORTAMOS EL AIRBAG (Lo dejamos por seguridad)
+// 2. IMPORTAMOS EL AIRBAG
 import ErrorBoundary from './components/ErrorBoundary'
 
 // 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES
@@ -44,16 +44,23 @@ function AppRoutes() {
     initNotifications(); 
   }, []);
 
-  // 2. ESCUCHA DE SESIÓN (Mucho más simple en Web)
+  // 2. ESCUCHA DE SESIÓN (OPTIMIZADA)
   useEffect(() => {
     // Supabase maneja el retorno de Google automáticamente en Web
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`🔐 Evento Web: ${event}`);
       
       if (event === 'SIGNED_IN' && session) {
-        navigate('/dashboard', { replace: true });
+        // CORRECCIÓN IMPORTANTE:
+        // Solo redirigimos al dashboard si el usuario está estrictamente en el Login ('/')
+        // Si ya está en '/market' u otra ruta, NO lo movemos.
+        if (window.location.pathname === '/') {
+           navigate('/dashboard', { replace: true });
+        }
       }
+      
       if (event === 'SIGNED_OUT') {
+        // Al salir, sí forzamos ir al login
         navigate('/');
       }
     });
