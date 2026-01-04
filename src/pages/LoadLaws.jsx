@@ -1,12 +1,33 @@
 import { useState } from 'react'
-// CORRECCIÓN IMPORTANTE: Solo un "../" porque estamos en src/pages/
+// NOTA: Si este archivo está en src/pages/LoadLaws.jsx, usamos "../"
 import { supabase } from '../lib/supabase' 
-import { Upload, Loader2 } from 'lucide-react'
+import { Upload, Loader2, Trash2 } from 'lucide-react'
 
 export default function LoadLaws() {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 })
+
+  // --- FUNCIÓN DE LIMPIEZA INTELIGENTE ---
+  const limpiarDatos = (rawJson) => {
+    return rawJson.map(item => {
+      // 1. Eliminamos el ID para que Supabase genere uno nuevo y válido (UUID)
+      const { id, ...resto } = item
+      
+      // 2. Limpiamos el título si tiene HTML sucio
+      let tituloLimpio = resto.title || ""
+      if (tituloLimpio.includes("<")) {
+        const tmp = document.createElement("DIV")
+        tmp.innerHTML = tituloLimpio
+        tituloLimpio = tmp.textContent || tmp.innerText || ""
+      }
+
+      return {
+        ...resto,
+        title: tituloLimpio.trim()
+      }
+    })
+  }
 
   const handleFileUpload = async (event) => {
     const file = event.target.files[0]
@@ -18,11 +39,16 @@ export default function LoadLaws() {
     const reader = new FileReader()
     reader.onload = async (e) => {
       try {
-        const json = JSON.parse(e.target.result)
-        setStats({ total: json.length, success: 0, errors: 0 })
-        setLogs(prev => [`✅ Archivo válido. Detectados ${json.length} artículos.`, ...prev])
+        const rawJson = JSON.parse(e.target.result)
         
-        await uploadInBatches(json)
+        // APLICAMOS LA LIMPIEZA AQUÍ
+        setLogs(prev => [`🧹 Limpiando datos (quitando IDs viejos y HTML)...`, ...prev])
+        const cleanJson = limpiarDatos(rawJson)
+        
+        setStats({ total: cleanJson.length, success: 0, errors: 0 })
+        setLogs(prev => [`✅ Datos listos. Detectados ${cleanJson.length} artículos.`, ...prev])
+        
+        await uploadInBatches(cleanJson)
       } catch (err) {
         setLogs(prev => [`❌ Error al leer JSON: ${err.message}`, ...prev])
         setLoading(false)
@@ -62,7 +88,7 @@ export default function LoadLaws() {
     <div className="min-h-screen bg-slate-50 p-8">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <Upload className="text-amber-600" /> Cargador Masivo de Leyes
+          <Upload className="text-amber-600" /> Cargador Masivo (Auto-Limpieza)
         </h1>
 
         <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 transition-colors relative">
@@ -79,8 +105,9 @@ export default function LoadLaws() {
             <Upload className="mx-auto text-slate-400 mb-2" size={40} />
           )}
           <p className="text-slate-600 font-medium">
-            {loading ? "Procesando leyes..." : "Arrastra tu archivo laws.json aquí"}
+            {loading ? "Procesando..." : "Arrastra tu leyes.json aquí"}
           </p>
+          <p className="text-xs text-slate-400 mt-2">El sistema corregirá los IDs automáticamente.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-6 text-center">
