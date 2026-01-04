@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import useTheme from '../../hooks/useTheme'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
+// 1. IMPORTAMOS DRIVER.JS Y SUS ESTILOS
+import { driver } from "driver.js";
+import "driver.js/dist/driver.css";
 
 // Importamos los iconos
 import { LogOut, Award, TrendingUp, CalendarCheck, Sun, Moon, BookA, ShoppingBag, Book, Newspaper, MessageCircle } from 'lucide-react'
 
-// --- NUEVA IMPORTACIÓN: BOTÓN DE NOTIFICACIONES ---
+// Botón de notificaciones
 import NotificationButton from '../../components/ui/NotificationButton'
 
-// --- NUEVA IMPORTACIÓN: TUTORIAL DE BIENVENIDA ---
-import WelcomeTour from '../../components/ui/WelcomeTour'
+// (Hemos retirado WelcomeTour para usar el Driver.js que es más pro)
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -25,6 +27,89 @@ export default function Dashboard() {
   const [loadingAgenda, setLoadingAgenda] = useState(true)
   const [progresoData, setProgresoData] = useState('Cargando...') 
   // ------------------------------------
+
+  // --- 2. CONFIGURACIÓN DEL TOUR GUIADO ---
+  useEffect(() => {
+    // Verificamos si ya vio el tour
+    const hasSeenTour = localStorage.getItem('iuris_walkthrough_v1')
+    
+    if (!hasSeenTour) {
+      const driverObj = driver({
+        showProgress: true,
+        allowClose: false,
+        nextBtnText: 'Siguiente →',
+        prevBtnText: '← Atrás',
+        doneBtnText: '¡Entendido!',
+        steps: [
+          { 
+            element: '#tour-welcome', 
+            popover: { 
+              title: 'Bienvenido a IURIS UNA', 
+              description: 'Tu plataforma todo-en-uno. Vamos a dar un recorrido rápido.', 
+              side: "bottom", 
+              align: 'center' 
+            } 
+          },
+          { 
+            element: '#tour-gpa', 
+            popover: { 
+              title: 'Tu Promedio (GPA)', 
+              description: 'Tu calificación en tiempo real. Toca aquí para calcular cuánto necesitas para pasar.', 
+              side: "bottom", 
+              align: 'start' 
+            } 
+          },
+          { 
+            element: '#tour-market', 
+            popover: { 
+              title: 'Mercado Estudiantil', 
+              description: 'Vende tus resúmenes o compra libros. ¡Genera ingresos extra!', 
+              side: "top", 
+              align: 'start' 
+            } 
+          },
+          { 
+            element: '#tour-library', 
+            popover: { 
+              title: 'Librería y Leyes', 
+              description: 'Accede a todas las leyes paraguayas actualizadas, incluso sin internet.', 
+              side: "top", 
+              align: 'start' 
+            } 
+          },
+          { 
+            element: '#tour-chat', 
+            popover: { 
+              title: 'Comunidad', 
+              description: 'Grupos de estudio verificados. Solo estudiantes reales de la UNA.', 
+              side: "top", 
+              align: 'start' 
+            } 
+          },
+          { 
+            element: '#tour-agenda', 
+            popover: { 
+              title: 'Tu Agenda', 
+              description: 'No pierdas ningún parcial. Aquí verás tus fechas límites más próximas.', 
+              side: "top", 
+              align: 'start' 
+            } 
+          }
+        ],
+        onDestroyStarted: () => {
+           // Guardamos que ya lo vio al cerrar
+           localStorage.setItem('iuris_walkthrough_v1', 'true')
+           driverObj.destroy();
+        },
+      });
+
+      // Pequeño delay para asegurar que la interfaz cargó
+      setTimeout(() => {
+        driverObj.drive();
+      }, 1000);
+    }
+  }, [])
+  // ----------------------------------------
 
   useEffect(() => {
     getUser()
@@ -154,12 +239,8 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 pb-24 transition-colors duration-300">
       
-      {/* --- INTEGRACIÓN TUTORIAL: SOLO APARECE LA PRIMERA VEZ --- */}
-      <WelcomeTour />
-      {/* -------------------------------------------------------- */}
-
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
+      {/* HEADER con ID #tour-welcome */}
+      <div id="tour-welcome" className="flex justify-between items-center mb-8 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Hola, Colega</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 truncate max-w-[200px]">{userEmail}</p>
@@ -188,8 +269,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* TARJETA PROMEDIO */}
-      <Link to="/gpa" className="block transform transition hover:scale-[1.02] active:scale-95 mb-6">
+      {/* TARJETA PROMEDIO con ID #tour-gpa */}
+      <Link to="/gpa" id="tour-gpa" className="block transform transition hover:scale-[1.02] active:scale-95 mb-6">
         <div className="bg-slate-900 dark:bg-slate-800 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden cursor-pointer border border-transparent dark:border-slate-700">
           <div className="relative z-10">
             <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Promedio General</p>
@@ -216,8 +297,8 @@ export default function Dashboard() {
       {/* SECCIÓN HERRAMIENTAS */}
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Herramientas</h3>
 
-      {/* 0. IURIS CHAT */}
-      <Link to="/chat" className="block mb-3">
+      {/* 0. IURIS CHAT con ID #tour-chat */}
+      <Link to="/chat" id="tour-chat" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-green-400 group relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-green-50 dark:to-green-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
@@ -246,8 +327,8 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* 2. MERCADO UNA */}
-      <Link to="/market" className="block mb-3">
+      {/* 2. MERCADO UNA con ID #tour-market */}
+      <Link to="/market" id="tour-market" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-indigo-400 group relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-indigo-50 dark:to-indigo-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
@@ -261,8 +342,8 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* 3. LIBRERÍA DIGITAL */}
-      <Link to="/library" className="block mb-3">
+      {/* 3. LIBRERÍA DIGITAL con ID #tour-library */}
+      <Link to="/library" id="tour-library" className="block mb-3">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-fuchsia-400 group relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-fuchsia-50 dark:to-fuchsia-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           
@@ -289,10 +370,10 @@ export default function Dashboard() {
         </div>
       </Link>
 
-      {/* AGENDA */}
+      {/* AGENDA con ID #tour-agenda */}
       <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-lg">Tu Agenda</h3>
       
-      <div className="space-y-3">
+      <div id="tour-agenda" className="space-y-3">
         {/* Card 1: PRÓXIMO PARCIAL */}
         <Link to="/agenda" className="block">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex gap-4 items-center transition-colors hover:border-blue-400">

@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --- ESTILOS GENERALES DE LA APP --- */
+
 /* Estilos base para el modo claro y oscuro */
 html {
   /* Esto hace que el cambio de color tarde 300ms, muy elegante */
@@ -19,4 +21,67 @@ html, body {
 html.dark body {
   background-color: #0f172a; /* slate-900 (Fondo oscuro profundo) */
   color: #f1f5f9; /* slate-100 (Texto claro) */
+}
+
+
+/* --- ESTILOS PARA EL TOUR GUIADO (DRIVER.JS) --- */
+/* Esto personaliza la cajita de ayuda para que combine con tu diseño */
+
+.driver-popover.driverjs-theme {
+  background-color: #1e293b; /* Slate-800 (Fondo oscuro elegante) */
+  color: white;
+  border-radius: 16px; /* Bordes más redondeados */
+  padding: 20px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); /* Sombra suave */
+  border: 1px solid #334155; /* Borde sutil Slate-700 */
+}
+
+.driver-popover-title {
+  font-size: 18px;
+  font-weight: 800; /* Extra bold */
+  margin-bottom: 8px;
+  color: #fbbf24; /* Amber-400 (Dorado para resaltar) */
+  letter-spacing: -0.5px;
+}
+
+.driver-popover-description {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #cbd5e1; /* Slate-300 (Texto legible pero suave) */
+  margin-bottom: 20px !important;
+}
+
+/* Botones del tour (Siguiente / Entendido) */
+.driver-popover-footer button {
+  background-color: #4f46e5 !important; /* Indigo-600 (Tu color principal) */
+  color: white !important;
+  text-shadow: none !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 10px 20px !important;
+  font-weight: bold;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.driver-popover-footer button:hover {
+  background-color: #4338ca !important; /* Indigo-700 al pasar mouse */
+  transform: scale(1.05); /* Pequeño efecto zoom */
+}
+
+/* Botón "Atrás" (si aparece) */
+.driver-popover-footer .driver-popover-prev-btn {
+  background-color: transparent !important;
+  border: 1px solid #475569 !important; /* Borde gris */
+  color: #94a3b8 !important; /* Texto gris */
+}
+
+.driver-popover-footer .driver-popover-prev-btn:hover {
+  background-color: #334155 !important;
+  color: white !important;
+}
+
+.driver-popover-navigation-btns {
+  justify-content: space-between !important;
+  gap: 12px;
 }
