@@ -1,4 +1,5 @@
 import { useState } from 'react'
+// Usamos "../" porque estamos en src/pages/
 import { supabase } from '../lib/supabase' 
 import { Upload, Loader2, Wrench, CheckCircle, AlertTriangle } from 'lucide-react'
 
@@ -12,7 +13,7 @@ export default function LoadLaws() {
       // 1. Quitamos ID viejo (cn-1) para que Supabase cree uno nuevo
       const { id, ...resto } = item
       
-      // 2. Limpiamos HTML sucio del título
+      // 2. Limpiamos HTML sucio del título si existe
       let tituloLimpio = resto.title || ""
       if (tituloLimpio.includes("<")) {
         const tmp = document.createElement("DIV")
@@ -39,50 +40,40 @@ export default function LoadLaws() {
       try {
         let text = e.target.result.trim()
 
-        // === CIRUGÍA DE JSON (REPARACIÓN AUTOMÁTICA) ===
-        setLogs(prev => ["🔧 Analizando estructura del archivo...", ...prev])
+        setLogs(prev => ["🔧 Ejecutando reparación agresiva de JSON...", ...prev])
 
-        // 1. Si pegaste array junto a array (ej: ][), los unimos con coma
-        if (text.match(/\]\s*\[/)) {
-            setLogs(prev => ["🩹 Reparando: Se detectaron múltiples arrays pegados. Uniendo...", ...prev])
-            text = text.replace(/\]\s*\[/g, ',')
-        }
+        // 1. MATA LOS ERRORES DE ARRAY PEGADOS (ej: ][ -> ,)
+        // Reemplaza cualquier corchete de cierre seguido de corchete de apertura
+        text = text.replace(/\]\s*\[/g, ',')
 
-        // 2. Si pegaste objetos sueltos sin coma (ej: } {), agregamos la coma
-        // Esta es la causa de tu error en la línea 2040
-        if (text.match(/\}\s*[\r\n]+\s*\{/)) {
-            setLogs(prev => ["🩹 Reparando: Faltaban comas entre los artículos. Agregando...", ...prev])
-            text = text.replace(/(\})\s*([\r\n]+)\s*(\{)/g, '$1,$2$3')
-        }
+        // 2. MATA LOS ERRORES DE OBJETOS PEGADOS (ej: } { -> }, {)
+        // Esta regex busca: "}" + cualquier espacio/enter + "{" y le pone coma
+        text = text.replace(/}\s*{/g, '}, {')
 
-        // 3. Aseguramos que empiece y termine con corchetes [ ... ]
-        if (!text.startsWith('[')) {
-             setLogs(prev => ["🩹 Reparando: Agregando corchete de inicio '['...", ...prev])
-             text = '[' + text
-        }
-        if (!text.endsWith(']')) {
-             // A veces queda una coma suelta al final (ej: ...},)
-             if (text.trim().endsWith(',')) {
-                 text = text.trim().slice(0, -1) 
-             }
-             setLogs(prev => ["🩹 Reparando: Agregando corchete final ']'...", ...prev])
-             text = text + ']'
-        }
-        // ===============================================
+        // 3. LIMPIEZA DE BORDES
+        // Si hay comas al final antes del cierre (ej: ",]")
+        text = text.replace(/,\s*\]/g, ']')
+        
+        // 4. ASEGURAR ESTRUCTURA ARRAY
+        // Si no empieza con [, ponerlo
+        if (!text.startsWith('[')) text = '[' + text
+        // Si no termina con ], ponerlo
+        if (!text.endsWith(']')) text = text + ']'
 
+        // Intentamos parsear
         const rawJson = JSON.parse(text)
         
-        setLogs(prev => [`✅ JSON Reparado y Leído. Procesando ${rawJson.length} artículos...`, ...prev])
-        const cleanJson = limpiarDatos(rawJson)
+        setLogs(prev => [`✅ JSON Reparado. ¡Milagro! Detectados ${rawJson.length} artículos.`, ...prev])
         
+        const cleanJson = limpiarDatos(rawJson)
         setStats({ total: cleanJson.length, success: 0, errors: 0 })
         
         await uploadInBatches(cleanJson)
 
       } catch (err) {
         console.error(err)
-        // Si falla aquí, es que el archivo está muy roto
-        setLogs(prev => [`❌ Error FATAL: ${err.message}. Revisa la consola (F12) para más detalles.`, ...prev])
+        // Si falla aquí, muestra la posición exacta para debugging (aunque ya no debería)
+        setLogs(prev => [`❌ Error FATAL: ${err.message}.`, ...prev])
         setLoading(false)
       }
     }
@@ -120,7 +111,7 @@ export default function LoadLaws() {
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-800">
-          <Wrench className="text-amber-600" /> Reparador y Cargador de Leyes
+          <Wrench className="text-amber-600" /> Cargador "Motosierra" v3.0
         </h1>
 
         <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 transition-colors relative group">
@@ -141,7 +132,7 @@ export default function LoadLaws() {
           <p className="text-slate-600 font-medium">
             {loading ? "Reparando y subiendo..." : "Arrastra tu archivo leyes.json aquí"}
           </p>
-          <p className="text-xs text-slate-400 mt-2">Corregirá automáticamente la falta de comas y corchetes.</p>
+          <p className="text-xs text-slate-400 mt-2">Esta versión fuerza las comas donde falten.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-6 text-center">
@@ -164,7 +155,7 @@ export default function LoadLaws() {
           {logs.map((log, i) => (
             <div key={i} className={`mb-1.5 border-b border-slate-800 pb-1 ${
                 log.includes("FATAL") ? "text-red-400 font-bold" : 
-                log.includes("🩹") || log.includes("🔧") ? "text-yellow-400" :
+                log.includes("🔧") ? "text-yellow-400" :
                 "text-green-400"
             }`}>
                 {log}
