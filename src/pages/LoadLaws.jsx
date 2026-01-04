@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { supabase } from '../../lib/supabase'
-import { Upload, Check, AlertCircle, Loader2 } from 'lucide-react'
+// CORRECCIÓN IMPORTANTE: Solo un "../" porque estamos en src/pages/
+import { supabase } from '../lib/supabase' 
+import { Upload, Loader2 } from 'lucide-react'
 
 export default function LoadLaws() {
   const [loading, setLoading] = useState(false)
@@ -31,7 +32,7 @@ export default function LoadLaws() {
   }
 
   const uploadInBatches = async (data) => {
-    const BATCH_SIZE = 500 // Subimos de a 500 para no saturar
+    const BATCH_SIZE = 500
     let successCount = 0
     let errorCount = 0
 
@@ -41,7 +42,7 @@ export default function LoadLaws() {
 
       const { error } = await supabase
         .from('laws_db')
-        .upsert(batch, { onConflict: 'article, corpus' }) // Evita duplicados
+        .upsert(batch, { onConflict: 'article, corpus' })
 
       if (error) {
         errorCount += batch.length
@@ -50,7 +51,6 @@ export default function LoadLaws() {
         successCount += batch.length
       }
       
-      // Actualizamos progreso visual
       setStats({ total: data.length, success: successCount, errors: errorCount })
     }
 
@@ -81,10 +81,8 @@ export default function LoadLaws() {
           <p className="text-slate-600 font-medium">
             {loading ? "Procesando leyes..." : "Arrastra tu archivo laws.json aquí"}
           </p>
-          <p className="text-xs text-slate-400 mt-2">Soporta archivos gigantes (+50MB)</p>
         </div>
 
-        {/* Estadísticas */}
         <div className="grid grid-cols-3 gap-4 mt-6 text-center">
             <div className="bg-blue-50 p-3 rounded-lg">
                 <div className="text-2xl font-bold text-blue-700">{stats.total}</div>
@@ -100,9 +98,7 @@ export default function LoadLaws() {
             </div>
         </div>
 
-        {/* Consola de Logs */}
         <div className="mt-6 bg-slate-900 rounded-lg p-4 h-64 overflow-y-auto font-mono text-xs text-green-400">
-          {logs.length === 0 && <span className="text-slate-600">Esperando archivo...</span>}
           {logs.map((log, i) => (
             <div key={i} className="mb-1 border-b border-slate-800 pb-1">{log}</div>
           ))}
