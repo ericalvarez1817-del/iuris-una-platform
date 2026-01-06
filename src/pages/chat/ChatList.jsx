@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { 
   MessageCircle, Plus, Search, Users, ArrowLeft, X, 
-  MoreVertical, Check, CheckCheck, Camera, UserPlus 
+  CheckCheck, Camera, Loader2 
 } from 'lucide-react'
 
 // 1. IMPORTAMOS EL CEREBRO DE NOTIFICACIONES
@@ -52,73 +52,74 @@ export default function ChatList() {
 
   // Inicialización
   useEffect(() => {
+    // 1. Obtener sesión y cargar lista inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session)
-        if(session) fetchRooms(session.user.id)
+        if(session) fetchRooms(session.user.id, true) // true = mostrar loading inicial
     })
     
-    // --- SUSCRIPCIÓN OPTIMIZADA (SIN RE-FETCHING MASIVO) ---
+    // --- SUSCRIPCIÓN ROBUSTA (SOLUCIÓN AL BUG DE DESAPARICIÓN) ---
     const channel = supabase.channel('room_list_updates')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_rooms' }, (payload) => {
         const newRoomData = payload.new;
         
-        // 1. Notificación
+        // A. Notificación
         if (newRoomData.last_message) {
             sendNotification("💬 Nuevo Mensaje", newRoomData.last_message);
         }
 
-        // 2. Actualización Local Instantánea (Optimización)
-        setRooms(prevRooms => {
-            const exists = prevRooms.find(r => r.id === newRoomData.id)
-            if (!exists) return prevRooms // Si es sala nueva, mejor hacer fetch completo o ignorar
-            
-            // Actualizamos solo la sala que cambió y la movemos al principio
-            const otherRooms = prevRooms.filter(r => r.id !== newRoomData.id)
-            const updatedRoom = { ...exists, ...newRoomData } // Mantenemos datos visuales (display_name, etc)
-            
-            return [updatedRoom, ...otherRooms]
-        })
+        // B. Actualización Silenciosa
+        // Recargamos la lista completa para evitar errores de sincronización y datos faltantes.
+        // NO activamos el loading, por lo que el cambio es invisible y fluido.
+        if(session) fetchRooms(session.user.id, false) 
     })
     .subscribe()
 
     return () => supabase.removeChannel(channel)
   }, [session])
 
-  const fetchRooms = async (userId) => {
-    const { data: myInvolvements } = await supabase
-        .from('chat_participants')
-        .select('room_id')
-        .eq('user_id', userId)
+  const fetchRooms = async (userId, showLoading = false) => {
+    if(showLoading) setLoading(true)
+    
+    try {
+        const { data: myInvolvements } = await supabase
+            .from('chat_participants')
+            .select('room_id')
+            .eq('user_id', userId)
 
-    if (myInvolvements && myInvolvements.length > 0) {
-        const roomIds = myInvolvements.map(r => r.room_id)
-        
-        const { data: roomData } = await supabase
-            .from('chat_rooms')
-            .select('*, chat_participants(profiles(full_name, avatar_url, id))')
-            .in('id', roomIds)
-            .order('last_message_time', { ascending: false })
-        
-        const formattedRooms = roomData.map(room => {
-            if (room.is_group) {
-                return { ...room, display_name: room.name, display_image: room.image_url }
-            } else {
-                const other = room.chat_participants.find(p => p.profiles.id !== userId)?.profiles
-                return { 
-                    ...room, 
-                    display_name: other?.full_name || 'Usuario Desconocido', 
-                    display_image: other?.avatar_url 
+        if (myInvolvements && myInvolvements.length > 0) {
+            const roomIds = myInvolvements.map(r => r.room_id)
+            
+            const { data: roomData } = await supabase
+                .from('chat_rooms')
+                .select('*, chat_participants(profiles(full_name, avatar_url, id))')
+                .in('id', roomIds)
+                .order('last_message_time', { ascending: false })
+            
+            const formattedRooms = roomData.map(room => {
+                if (room.is_group) {
+                    return { ...room, display_name: room.name, display_image: room.image_url }
+                } else {
+                    const other = room.chat_participants.find(p => p.profiles.id !== userId)?.profiles
+                    return { 
+                        ...room, 
+                        display_name: other?.full_name || 'Usuario Desconocido', 
+                        display_image: other?.avatar_url 
+                    }
                 }
-            }
-        })
-        setRooms(formattedRooms)
+            })
+            setRooms(formattedRooms)
+        }
+    } catch (error) {
+        console.error("Error fetching rooms:", error)
+    } finally {
+        setLoading(false)
     }
-    setLoading(false)
   }
 
-  // --- FILTRADO ---
+  // --- FILTRADO SEGURO ---
   const visibleRooms = rooms.filter(room => 
-    room.display_name?.toLowerCase().includes(localFilter.toLowerCase())
+    room.display_name?.toLowerCase().includes((localFilter || '').toLowerCase())
   )
 
   // --- ACTIONS ---
@@ -133,7 +134,7 @@ export default function ChatList() {
         if (error) throw error
         setShowGroupModal(false)
         setNewGroupName('')
-        fetchRooms(session.user.id)
+        fetchRooms(session.user.id, false)
         navigate(`/chat/${roomId}`)
     } catch (error) { alert("Error: " + error.message) }
   }
@@ -160,7 +161,7 @@ export default function ChatList() {
           })
           if (error) throw error
           setShowUserModal(false)
-          fetchRooms(session.user.id)
+          fetchRooms(session.user.id, false)
           navigate(`/chat/${roomId}`)
       } catch (error) { alert("Error: " + error.message) }
   }
@@ -241,7 +242,11 @@ export default function ChatList() {
         ) : (
             /* LISTA REAL */
             <div className="pb-24 pt-1">
-                {visibleRooms.map(room => (
+                {visibleRooms.map(room => {
+                    // Calculamos si el mensaje es reciente (ej: hoy) para resaltarlo
+                    const isRecent = new Date(room.last_message_time).toDateString() === new Date().toDateString();
+                    
+                    return (
                     <div 
                         key={room.id} 
                         onClick={() => navigate(`/chat/${room.id}`)}
@@ -251,7 +256,7 @@ export default function ChatList() {
                         <div className="relative shrink-0">
                             <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-100 to-purple-100 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xl overflow-hidden border border-slate-100 dark:border-slate-800 shadow-sm group-hover:shadow-md transition-all">
                                 {room.display_image ? (
-                                    <img src={room.display_image} className="w-full h-full object-cover"/>
+                                    <img src={room.display_image} className="w-full h-full object-cover" alt="Avatar"/>
                                 ) : (
                                     room.display_name?.charAt(0).toUpperCase() || '#'
                                 )}
@@ -264,23 +269,25 @@ export default function ChatList() {
                                 <h3 className="font-bold text-slate-900 dark:text-slate-100 truncate text-[15px] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                                     {room.display_name}
                                 </h3>
+                                {/* Fecha con color si es reciente */}
                                 <span className={`text-[11px] font-medium shrink-0 ml-2 ${
-                                    // Simulación de "no leído" si fuera necesario: text-indigo-600 font-bold
-                                    'text-slate-400'
+                                    isRecent ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-slate-400'
                                 }`}>
                                     {formatChatDate(room.last_message_time)}
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <p className="text-[13px] text-slate-500 dark:text-slate-400 truncate pr-4 leading-relaxed flex items-center gap-1">
-                                    {/* Iconos según tipo de mensaje (simulado) */}
-                                    {room.last_message?.includes('http') ? <Camera size={12} className="text-slate-400"/> : <CheckCheck size={12} className="text-indigo-400"/>}
+                                <p className={`text-[13px] truncate pr-4 leading-relaxed flex items-center gap-1 ${
+                                    isRecent ? 'text-slate-700 dark:text-slate-300 font-medium' : 'text-slate-500 dark:text-slate-400'
+                                }`}>
+                                    {/* Iconos según tipo de mensaje */}
+                                    {room.last_message?.includes('http') ? <Camera size={13} className="text-slate-400"/> : <CheckCheck size={13} className="text-indigo-400"/>}
                                     {room.last_message || <span className="italic opacity-50">Borrador...</span>}
                                 </p>
                             </div>
                         </div>
                     </div>
-                ))}
+                )})}
             </div>
         )}
       </div>
@@ -376,7 +383,7 @@ export default function ChatList() {
 
                             {searchResults.map(user => (
                                 <div key={user.id} onClick={() => startDM(user.id)} className="flex items-center gap-4 p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition">
-                                    <img src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.full_name}&background=random`} className="w-12 h-12 rounded-full border border-slate-100 dark:border-slate-700 object-cover"/>
+                                    <img src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.full_name}&background=random`} className="w-12 h-12 rounded-full border border-slate-100 dark:border-slate-700 object-cover" alt="User"/>
                                     <div className="flex-1 border-b border-slate-50 dark:border-slate-800/50 pb-3 mb-[-12px]">
                                         <p className="font-bold text-slate-800 dark:text-white text-base">{user.full_name}</p>
                                         <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">¡Hola! Estoy usando Iuris.</p>
