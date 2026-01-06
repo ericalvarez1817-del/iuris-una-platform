@@ -444,8 +444,8 @@ const loadMessages = async (offset = 0) => {
         </div>
       )}
     </div>
-  )}
-
+  )
+  
   return (
     // CONTENEDOR PRINCIPAL: Full Screen en móvil (z-50) para tapar la navegación
     <div className="fixed inset-0 z-50 md:static md:z-auto bg-slate-100 dark:bg-slate-950 flex flex-col md:max-w-5xl md:mx-auto md:shadow-2xl md:h-[90vh] md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors relative">
