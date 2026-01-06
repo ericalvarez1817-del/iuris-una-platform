@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { 
@@ -50,36 +50,78 @@ export default function ChatList() {
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
 
-  // Inicialización
+  // Referencia para el canal de Supabase (Evita duplicados)
+  const channelRef = useRef(null)
+
+  // Inicialización y Carga
   useEffect(() => {
+    let mounted = true;
+
     // 1. Obtener sesión y cargar lista inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!mounted) return
         setSession(session)
-        if(session) fetchRooms(session.user.id, true) // true = mostrar loading inicial
+        if(session) fetchRooms(session.user.id)
     })
     
-    // --- SUSCRIPCIÓN ROBUSTA (SOLUCIÓN AL BUG DE DESAPARICIÓN) ---
+    return () => { mounted = false }
+  }, [])
+
+  // --- LÓGICA REALTIME OPTIMIZADA (CORAZÓN DEL ARREGLO) ---
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    // Limpiamos suscripción anterior si existe para evitar ecos
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+
     const channel = supabase.channel('room_list_updates')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_rooms' }, (payload) => {
         const newRoomData = payload.new;
         
-        // A. Notificación
-        if (newRoomData.last_message) {
-            sendNotification("💬 Nuevo Mensaje", newRoomData.last_message);
-        }
+        setRooms(prevRooms => {
+            // 1. FILTRO DE SEGURIDAD: ¿Este chat está en mi lista?
+            const existingRoomIndex = prevRooms.findIndex(r => r.id === newRoomData.id)
+            
+            // Si NO es un chat mío (es de otros usuarios), LO IGNORAMOS.
+            // Esto detiene el error de "Recursos Insuficientes".
+            if (existingRoomIndex === -1) return prevRooms;
 
-        // B. Actualización Silenciosa
-        // Recargamos la lista completa para evitar errores de sincronización y datos faltantes.
-        // NO activamos el loading, por lo que el cambio es invisible y fluido.
-        if(session) fetchRooms(session.user.id, false) 
+            // 2. ACTUALIZACIÓN LOCAL (Sin peticiones de red)
+            const existingRoom = prevRooms[existingRoomIndex];
+            
+            // Fusionamos datos nuevos con los viejos (mantenemos nombres y fotos)
+            const updatedRoom = { 
+                ...existingRoom, 
+                last_message: newRoomData.last_message,
+                last_message_time: newRoomData.last_message_time
+            }
+
+            // 3. Notificación (Solo si hubo cambio real de mensaje)
+            if (newRoomData.last_message && newRoomData.last_message !== existingRoom.last_message) {
+                sendNotification("💬 Nuevo Mensaje", newRoomData.last_message);
+            }
+
+            // 4. Reordenar: El chat actualizado sube al inicio
+            const otherRooms = prevRooms.filter(r => r.id !== newRoomData.id)
+            return [updatedRoom, ...otherRooms]
+        })
     })
     .subscribe()
 
-    return () => supabase.removeChannel(channel)
+    channelRef.current = channel;
+
+    return () => {
+        if (channelRef.current) supabase.removeChannel(channelRef.current)
+    }
   }, [session])
 
-  const fetchRooms = async (userId, showLoading = false) => {
-    if(showLoading) setLoading(true)
+  const fetchRooms = async (userId) => {
+    // Solo mostramos loading si la lista está vacía (carga inicial)
+    // Esto evita parpadeos en futuras recargas
+    setRooms(prev => {
+        if (prev.length === 0) setLoading(true)
+        return prev
+    })
     
     try {
         const { data: myInvolvements } = await supabase
@@ -134,7 +176,7 @@ export default function ChatList() {
         if (error) throw error
         setShowGroupModal(false)
         setNewGroupName('')
-        fetchRooms(session.user.id, false)
+        fetchRooms(session.user.id) // Aquí sí recargamos porque es un chat nuevo
         navigate(`/chat/${roomId}`)
     } catch (error) { alert("Error: " + error.message) }
   }
@@ -161,7 +203,7 @@ export default function ChatList() {
           })
           if (error) throw error
           setShowUserModal(false)
-          fetchRooms(session.user.id, false)
+          fetchRooms(session.user.id) // Aquí sí recargamos porque es un chat nuevo
           navigate(`/chat/${roomId}`)
       } catch (error) { alert("Error: " + error.message) }
   }
