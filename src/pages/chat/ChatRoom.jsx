@@ -102,10 +102,8 @@ export default function ChatRoom() {
     channel.on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, 
         (payload) => {
-            // Solo añadimos si no existe ya (para evitar duplicados por optimismo)
             setMessages(prev => {
                 if (prev.find(m => m.id === payload.new.id)) return prev
-                // Hacemos fetch del mensaje nuevo para tener los datos del perfil (nombre/foto)
                 fetchSingleMessage(payload.new.id)
                 return prev
             })
@@ -119,9 +117,8 @@ export default function ChatRoom() {
         const typing = new Set()
         
         for (const key in state) {
-            if (key === session.user.id) continue; // Ignorarme a mí mismo
+            if (key === session.user.id) continue;
             online.add(key)
-            // Asumimos que el payload de presencia tiene { typing: true }
             if (state[key][0]?.typing) typing.add(state[key][0].username || 'Alguien')
         }
         setOnlineUsers(online)
@@ -140,7 +137,6 @@ export default function ChatRoom() {
   // --- FUNCIONES CORE ---
 
   const setupRoom = async (myUserId) => {
-      // 1. Detalles de la Sala
       const { data: room } = await supabase.from('chat_rooms').select('*').eq('id', roomId).single()
       if (!room) return navigate('/chat')
 
@@ -156,7 +152,6 @@ export default function ChatRoom() {
           setRoomDetails({ name: otherUser?.full_name || 'Usuario', avatar: otherUser?.avatar_url, is_group: false })
       }
 
-      // 2. Carga Inicial de Mensajes (Últimos 20)
       await loadMessages(0)
   }
 
@@ -167,21 +162,18 @@ export default function ChatRoom() {
         .from('messages')
         .select('*, profiles(full_name, avatar_url)')
         .eq('room_id', roomId)
-        .order('created_at', { ascending: false }) // Traemos del más nuevo al más viejo
+        .order('created_at', { ascending: false })
         .range(offset, offset + MESSAGES_PER_PAGE - 1)
       
       if (data) {
-          // Si devuelve menos de lo pedido, no hay más historial
           if (data.length < MESSAGES_PER_PAGE) setHasMore(false)
-
-          const orderedMessages = data.reverse() // Ordenamos cronológicamente para mostrar
+          const orderedMessages = data.reverse()
 
           setMessages(prev => {
               if (offset === 0) {
-                  setTimeout(scrollToBottom, 100) // Scroll al fondo solo en carga inicial
+                  setTimeout(scrollToBottom, 100)
                   return orderedMessages
               } else {
-                  // Mantenemos posición de scroll al cargar viejos
                   return [...orderedMessages, ...prev]
               }
           })
@@ -190,24 +182,20 @@ export default function ChatRoom() {
       setLoadingMore(false)
   }
 
-  // --- SCROLL INFINITO LÓGICA ---
   const handleScroll = () => {
       const container = chatContainerRef.current
       if (!container) return
 
-      // Si el usuario scrollea hasta arriba y hay más mensajes
       if (container.scrollTop === 0 && hasMore && !loadingMore && !loadingInitial) {
           prevScrollHeightRef.current = container.scrollHeight
           loadMessages(messages.length)
       }
   }
 
-  // Efecto para restaurar scroll después de cargar más mensajes
   useEffect(() => {
       if (!loadingMore && prevScrollHeightRef.current > 0 && chatContainerRef.current) {
           const container = chatContainerRef.current
           const newScrollHeight = container.scrollHeight
-          // Ajustamos el scroll para que parezca que nos quedamos en el mismo mensaje
           container.scrollTop = newScrollHeight - prevScrollHeightRef.current
           prevScrollHeightRef.current = 0
       }
@@ -233,21 +221,16 @@ export default function ChatRoom() {
   // --- INDICADOR DE ESCRIBIENDO ---
   const handleTypingInput = (e) => {
       setNewMessage(e.target.value)
-      
-      // Ajuste de altura textarea
       e.target.style.height = 'auto'
       e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
 
-      // Lógica de "Typing..."
       if (!typingTimeoutRef.current) {
-         // Emitir "Estoy escribiendo"
          const channel = supabase.channel(`room:${roomId}`)
          channel.track({ online_at: new Date().toISOString(), typing: true, username: 'Yo' })
       }
       
       clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = setTimeout(() => {
-          // Dejar de emitir después de 2s inactivo
           const channel = supabase.channel(`room:${roomId}`)
           channel.track({ online_at: new Date().toISOString(), typing: false })
           typingTimeoutRef.current = null
@@ -262,17 +245,14 @@ export default function ChatRoom() {
     const fileToSend = selectedFile
     const typeToSend = fileToSend ? fileType : 'text'
 
-    // Limpieza UI
     setNewMessage('')
     clearFile() 
     setShowAttachMenu(false)
     setUploading(true)
     
-    // Reset altura textarea
     const textarea = document.querySelector('textarea')
     if(textarea) textarea.style.height = 'auto'
 
-    // UI Optimista
     const tempId = `temp-${Date.now()}`
     const tempMessage = {
         id: tempId,
@@ -297,7 +277,6 @@ export default function ChatRoom() {
                 const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' }
                 fileToUpload = await imageCompression(fileToSend, options)
             }
-            // Upload Storage
             const ext = typeToSend === 'image' ? 'webp' : fileToSend.name.split('.').pop()
             const fileName = `${typeToSend}_${Date.now()}.${ext}`
             await supabase.storage.from('chat-media').upload(fileName, fileToUpload)
@@ -305,7 +284,6 @@ export default function ChatRoom() {
             mediaUrl = data.publicUrl
         }
 
-        // Insert DB
         const { data: sentData, error } = await supabase.from('messages').insert({
             room_id: roomId,
             sender_id: session.user.id,
@@ -316,10 +294,8 @@ export default function ChatRoom() {
 
         if (error) throw error
 
-        // Reemplazar optimista con real
         setMessages(prev => prev.map(msg => msg.id === tempId ? sentData : msg))
 
-        // Actualizar chat_rooms (Last Message)
         await supabase.from('chat_rooms').update({
             last_message: typeToSend !== 'text' ? `📎 ${typeToSend === 'image' ? 'Foto' : 'Video'}` : contentToSend,
             last_message_time: new Date()
@@ -345,7 +321,7 @@ export default function ChatRoom() {
   }
   const clearFile = () => { setSelectedFile(null); setPreviewUrl(null); setFileType('text'); }
 
-  // --- BÚSQUEDA USUARIOS (MODAL) ---
+  // --- BÚSQUEDA USUARIOS ---
   const handleSearchUsers = async (term) => {
       setSearchTerm(term)
       if (term.length < 3) return setSearchResults([])
@@ -358,15 +334,15 @@ export default function ChatRoom() {
   }
 
   return (
-    <div className="flex flex-col h-screen md:h-[100dvh] bg-slate-100 dark:bg-slate-950 relative overflow-hidden">
+    // CAMBIO CLAVE: Contenedor 'fixed inset-0 z-50' para tapar la navegación en móvil
+    <div className="fixed inset-0 z-50 md:static md:z-auto bg-slate-100 dark:bg-slate-950 flex flex-col md:max-w-5xl md:mx-auto md:shadow-2xl md:h-[90vh] md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors">
       
-      {/* 1. HEADER GLASSMORPHIC */}
+      {/* 1. HEADER */}
       <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 shadow-sm flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 z-20 absolute top-0 w-full">
         <button onClick={() => navigate('/chat')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"><ArrowLeft size={20} className="dark:text-white"/></button>
         
         <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-slate-800 flex items-center justify-center text-indigo-600 font-bold overflow-hidden border border-slate-200 dark:border-slate-700 relative shadow-sm">
              {roomDetails?.avatar ? <img src={roomDetails.avatar} className="w-full h-full object-cover"/> : (roomDetails?.name?.charAt(0) || '#')}
-             {/* Punto Online */}
              {onlineUsers.size > 0 && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse"></span>}
         </div>
         
@@ -384,7 +360,7 @@ export default function ChatRoom() {
         )}
       </div>
 
-      {/* 2. ÁREA DE MENSAJES CON FONDO DOODLE */}
+      {/* 2. ÁREA DE MENSAJES */}
       <div 
         ref={chatContainerRef}
         onScroll={handleScroll}
@@ -397,7 +373,6 @@ export default function ChatRoom() {
             const isMe = msg.sender_id === session?.user?.id
             const isOptimistic = msg.is_sending 
             
-            // Agrupación visual
             const prevMsg = messages[index - 1]
             const nextMsg = messages[index + 1]
             
@@ -405,14 +380,12 @@ export default function ChatRoom() {
             const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id || showDate
             const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id
             
-            // Bordes inteligentes
             const roundedClass = isMe 
                 ? `${isFirstInGroup ? 'rounded-tr-none' : ''} ${isLastInGroup ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl rounded-tr-2xl`
                 : `${isFirstInGroup ? 'rounded-tl-none' : ''} ${isLastInGroup ? 'rounded-bl-2xl' : 'rounded-bl-md'} rounded-r-2xl rounded-tl-2xl`
 
             return (
                 <div key={index} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {/* FECHA FLOTANTE */}
                     {showDate && (
                         <div className="flex justify-center my-4 sticky top-16 z-10">
                             <span className="bg-slate-200/80 dark:bg-slate-800/80 backdrop-blur-sm text-slate-600 dark:text-slate-300 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">
@@ -430,21 +403,18 @@ export default function ChatRoom() {
                             ${roundedClass}
                             ${isOptimistic ? 'opacity-70' : 'opacity-100'}
                         `}>
-                            {/* COLA DE BURBUJA (TAIL) */}
                             {isFirstInGroup && (
                                 <svg className={`absolute top-0 ${isMe ? '-right-2 text-indigo-600' : '-left-2 text-white dark:text-slate-800'} w-2 h-3`} viewBox="0 0 8 13" fill="currentColor">
                                     <path d={isMe ? "M-3 0v13h11c0-5-2-9-11-13z" : "M11 0v13H0c0-5 2-9 11-13z"} />
                                 </svg>
                             )}
 
-                            {/* Nombre en grupos */}
                             {!isMe && roomDetails?.is_group && isFirstInGroup && (
                                 <p className="text-[11px] font-bold mb-1 opacity-90" style={{ color: stringToColor(msg.profiles?.full_name || 'A') }}>
                                     {msg.profiles?.full_name}
                                 </p>
                             )}
 
-                            {/* Multimedia */}
                             {msg.media_type === 'image' && (
                                 <div className="mb-1 rounded-lg overflow-hidden relative group/img">
                                     <img 
@@ -458,10 +428,8 @@ export default function ChatRoom() {
                                 <video src={msg.media_url} controls className="rounded-lg mb-1 max-h-80 w-full bg-black"/>
                             )}
 
-                            {/* Texto */}
                             {msg.content && <p className="whitespace-pre-wrap break-words leading-snug">{msg.content}</p>}
                             
-                            {/* Hora y Estado */}
                             <div className={`flex justify-end items-center gap-1 mt-1 -mb-1 select-none ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                                 <span className="text-[10px]">
                                     {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
@@ -476,10 +444,8 @@ export default function ChatRoom() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 3. INPUT BAR MODERNO */}
+      {/* 3. INPUT BAR */}
       <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-30">
-        
-        {/* PREVIEW ARCHIVO */}
         {selectedFile && (
             <div className="px-4 py-3 flex items-center gap-3 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-100 dark:border-slate-800 animate-in slide-in-from-bottom-5">
                 <div className="w-14 h-14 rounded-xl overflow-hidden relative shrink-0 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -499,10 +465,7 @@ export default function ChatRoom() {
             </div>
         )}
 
-        {/* BARRA DE ESCRITURA */}
         <div className="p-2 md:p-3 flex items-end gap-2 max-w-5xl mx-auto">
-            
-            {/* Botón Adjuntar Expandible */}
             <div className="relative pb-1">
                 <button 
                     onClick={() => setShowAttachMenu(!showAttachMenu)}
@@ -511,7 +474,6 @@ export default function ChatRoom() {
                     <Plus size={24} />
                 </button>
 
-                {/* Menú Flotante */}
                 {showAttachMenu && (
                     <div className="absolute bottom-16 left-0 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 p-2 flex flex-col gap-1 min-w-[160px] animate-in slide-in-from-bottom-5 zoom-in-95 z-50">
                         <label className="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl cursor-pointer transition">
@@ -528,7 +490,6 @@ export default function ChatRoom() {
                 )}
             </div>
             
-            {/* Input de Texto Auto-Expandible */}
             <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-[1.5rem] flex items-center px-4 py-1.5 my-1 border border-transparent focus-within:border-indigo-500/30 focus-within:bg-white dark:focus-within:bg-slate-900 transition-all shadow-inner">
                 <textarea 
                     className="w-full bg-transparent outline-none text-[15px] dark:text-white max-h-32 resize-none py-2 leading-relaxed"
@@ -545,7 +506,6 @@ export default function ChatRoom() {
                 />
             </div>
 
-            {/* Botón Enviar con Animación */}
             <button 
                 onClick={handleSend}
                 disabled={(!newMessage.trim() && !selectedFile) || uploading}
@@ -560,10 +520,8 @@ export default function ChatRoom() {
         </div>
       </div>
 
-      {/* COMPONENTES FLOTANTES */}
       {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
-      {/* MODAL AÑADIR MIEMBRO */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-6 relative shadow-2xl">
