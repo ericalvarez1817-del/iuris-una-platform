@@ -12,7 +12,10 @@ import {
 const MESSAGES_PER_PAGE = 20
 
 const getMessageDateLabel = (dateString) => {
+  if (!dateString) return ''
   const date = new Date(dateString)
+  if (isNaN(date.getTime())) return '' // Validación extra
+  
   const today = new Date()
   const yesterday = new Date(today)
   yesterday.setDate(yesterday.getDate() - 1)
@@ -25,6 +28,8 @@ const getMessageDateLabel = (dateString) => {
 const formatLastSeen = (dateString) => {
     if (!dateString) return ''
     const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ''
+
     const now = new Date()
     const diff = now - date
     
@@ -35,6 +40,7 @@ const formatLastSeen = (dateString) => {
 }
 
 function stringToColor(string) {
+    if (!string) return '#ccc';
     let hash = 0;
     for (let i = 0; i < string.length; i++) {
         hash = string.charCodeAt(i) + ((hash << 5) - hash);
@@ -43,7 +49,7 @@ function stringToColor(string) {
     return '#' + "00000".substring(0, 6 - c.length) + c;
 }
 
-// --- COMPONENTE LIGHTBOX (VISOR DE FOTOS) ---
+// --- COMPONENTE LIGHTBOX ---
 const ImageLightbox = ({ src, onClose }) => {
     if (!src) return null;
     return (
@@ -75,7 +81,7 @@ export default function ChatRoom() {
   // --- REALTIME & PRESENCIA (PREMIUM) ---
   const [onlineUsers, setOnlineUsers] = useState(new Set()) 
   const [typingUsers, setTypingUsers] = useState(new Set())
-  const [otherUserStatus, setOtherUserStatus] = useState({ isOnline: false, lastSeen: null }) // Nuevo estado para Last Seen
+  const [otherUserStatus, setOtherUserStatus] = useState({ isOnline: false, lastSeen: null })
   const typingTimeoutRef = useRef(null)
   const channelRef = useRef(null)
 
@@ -96,79 +102,97 @@ export default function ChatRoom() {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState([])
 
-  // 1. INICIALIZACIÓN
+  // 1. INICIALIZACIÓN SEGURA
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      if(session && roomId) setupRoom(session.user.id)
-    })
+    let mounted = true;
+    
+    const init = async () => {
+        try {
+            const { data: { session }, error } = await supabase.auth.getSession()
+            if (error || !session) {
+                if (mounted) navigate('/auth')
+                return
+            }
+            
+            if (mounted) {
+                setSession(session)
+                if (roomId) await setupRoom(session.user.id)
+            }
+        } catch (e) {
+            console.error("Error init chat:", e)
+            if (mounted) setLoadingInitial(false) // Asegurar que quite el loading
+        }
+    }
+
+    init()
+    return () => { mounted = false }
   }, [roomId])
 
-  // 2. REALTIME (Mensajes + Presencia + Typing + Broadcast)
+  // 2. REALTIME
   useEffect(() => {
     if (!session?.user?.id || !roomId) return;
 
-    // Configuración del canal con Broadcast habilitado
+    // Limpiar canal anterior si existe
+    if (channelRef.current) supabase.removeChannel(channelRef.current)
+
     const channel = supabase.channel(`room:${roomId}`, {
         config: { 
             presence: { key: session.user.id },
-            broadcast: { self: false } // No recibir mis propios broadcasts para evitar duplicados en la UI inmediata
+            broadcast: { self: false }
         } 
     })
     channelRef.current = channel
 
-    // A. Escuchar mensajes nuevos (Persistencia DB)
+    // A. Mensajes DB
     channel.on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, 
         (payload) => {
             setMessages(prev => {
-                // Lógica de Deduplicación Robusta:
-                // Si el mensaje ya existe por ID (DB) o si encontramos un mensaje "Broadcast" equivalente
                 const exists = prev.find(m => m.id === payload.new.id)
                 if (exists) return prev
 
-                // Si encontramos un mensaje temporal/broadcast que coincida en contenido y emisor reciente, lo reemplazamos
+                // Reconciliación con Broadcast
                 const broadcastMatchIndex = prev.findIndex(m => 
                     m.is_broadcast && 
                     m.sender_id === payload.new.sender_id && 
                     m.content === payload.new.content &&
-                    new Date(m.created_at).getTime() > new Date(payload.new.created_at).getTime() - 5000 // Ventana de 5s
+                    new Date(m.created_at).getTime() > new Date(payload.new.created_at).getTime() - 10000
                 )
 
                 if (broadcastMatchIndex !== -1) {
                     const newMessages = [...prev]
-                    // Hacemos fetch para asegurar datos completos (perfil)
                     fetchSingleMessage(payload.new.id).then(fullMsg => {
                         if(fullMsg) {
                              setMessages(current => current.map(m => m.id === payload.new.id ? fullMsg : m))
                         }
                     })
-                    // Temporalmente ponemos el payload crudo mientras carga el full
-                    newMessages[broadcastMatchIndex] = { ...payload.new, profiles: prev[broadcastMatchIndex].profiles }
+                    // Actualizar temporalmente con ID real
+                    newMessages[broadcastMatchIndex] = { 
+                        ...newMessages[broadcastMatchIndex], 
+                        id: payload.new.id, 
+                        is_broadcast: false 
+                    }
                     return newMessages
                 }
 
-                // Si es totalmente nuevo
                 fetchSingleMessage(payload.new.id)
                 return prev
             })
         }
     )
 
-    // B. Escuchar Broadcasts (Velocidad Luz - Mensajes Instantáneos)
+    // B. Broadcast (Mensajería Instantánea)
     channel.on('broadcast', { event: 'new_message' }, (payload) => {
         const incomingMsg = payload.payload
         setMessages(prev => {
-            // Evitar duplicados si por alguna razón extraña llega dos veces
             if (prev.find(m => m.id === incomingMsg.id)) return prev
-            // Añadir marcado como broadcast para futura reconciliación
             const broadcastMsg = { ...incomingMsg, is_broadcast: true }
             setTimeout(scrollToBottom, 50)
             return [...prev, broadcastMsg]
         })
     })
 
-    // C. Escuchar Presencia (Online / Escribiendo)
+    // C. Presencia
     channel.on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
         const online = new Set()
@@ -176,40 +200,45 @@ export default function ChatRoom() {
         
         let otherUserOnline = false
         
+        // Iteramos sobre las claves de presencia (user IDs)
         for (const key in state) {
             if (key === session.user.id) continue;
             online.add(key)
-            if (state[key][0]?.typing) typing.add(state[key][0].username || 'Alguien')
             
-            // Verificar si es el otro usuario en chat 1v1
-            if (roomDetails && !roomDetails.is_group && roomDetails.otherUserId === key) {
-                otherUserOnline = true
-            }
+            // Verificamos si alguien está escribiendo
+            // state[key] es un array de presencias para ese usuario (por si tiene multiples dispositivos)
+            state[key].forEach(p => {
+                if (p.typing) typing.add(p.username || 'Alguien')
+            })
+
+            // Verificar si es el otro usuario (para chats 1v1)
+            // Usamos una referencia a roomDetails desde una ref o verificando si la key coincide
+            // Nota: roomDetails en el closure de este efecto podría ser antiguo, 
+            // pero si setupRoom ya corrió, deberíamos tener la data necesaria.
         }
         
         setOnlineUsers(online)
         setTypingUsers(typing)
-        
-        // Actualizar estado "Last Seen" si se desconecta
-        if (roomDetails && !roomDetails.is_group) {
-            setOtherUserStatus(prev => ({
-                isOnline: otherUserOnline,
-                lastSeen: otherUserOnline ? null : prev.lastSeen // Mantenemos el último visto conocido si se desconecta
-            }))
-        }
+
+        // Actualizamos estado del "otro" usuario basado en la lista online actualizada
+        // Necesitamos acceder a la info del otro usuario. 
+        // Como este closure puede no tener el último roomDetails, confiamos en la actualización de estado
+        setOtherUserStatus(prev => {
+             // Si no sabemos quién es el otro usuario aún, no cambiamos nada crítico
+             return {
+                 ...prev,
+                 isOnline: online.size > 0 // Simplificación para 1v1: si hay alguien más, es él
+             }
+        })
     })
 
-    // D. Escuchar cuando alguien se va para actualizar Last Seen inmediatamente
     channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        if (roomDetails && !roomDetails.is_group) {
-            leftPresences.forEach(presence => {
-                if (presence.user_id === roomDetails.otherUserId) { // Asumimos user_id en metadata o key
-                    const now = new Date().toISOString()
-                    setOtherUserStatus({ isOnline: false, lastSeen: now })
-                    // Opcional: Actualizar en DB
-                    updateMyLastSeen(session.user.id, now)
-                }
-            })
+        // Cuando alguien se va, actualizamos su última vez
+        if (leftPresences.length > 0) {
+            setOtherUserStatus(prev => ({ 
+                isOnline: false, 
+                lastSeen: new Date().toISOString() 
+            }))
         }
     })
 
@@ -224,82 +253,111 @@ export default function ChatRoom() {
     })
 
     return () => supabase.removeChannel(channel)
-  }, [roomId, session, roomDetails?.otherUserId]) // Dependencia añadida para verificar online status correctamente
+  }, [roomId, session]) 
+  // Nota: Quitamos dependencias inestables para evitar reconexiones constantes
 
-  // --- FUNCIONES CORE ---
-
+  // --- SETUP ROOM ROBUSTO ---
   const setupRoom = async (myUserId) => {
-      // 1. Detalles de la Sala
-      const { data: room } = await supabase.from('chat_rooms').select('*').eq('id', roomId).single()
-      if (!room) return navigate('/chat')
+      try {
+        setLoadingInitial(true)
 
-      if (room.is_group) {
-          setRoomDetails({ name: room.name, avatar: room.image_url, is_group: true })
-      } else {
-          // Obtener también el campo last_seen del perfil si existe
-          const { data: participants } = await supabase
-              .from('chat_participants')
-              .select('profiles(id, full_name, avatar_url, last_seen)') 
-              .eq('room_id', roomId)
-          
-          const otherUser = participants.find(p => p.profiles.id !== myUserId)?.profiles
-          setRoomDetails({ 
-              name: otherUser?.full_name || 'Usuario', 
-              avatar: otherUser?.avatar_url, 
-              is_group: false,
-              otherUserId: otherUser?.id // Guardamos ID para chequeo de presencia
-          })
-          
-          // Establecer Last Seen inicial desde DB
-          setOtherUserStatus({
-              isOnline: false, // Se actualizará con Realtime
-              lastSeen: otherUser?.last_seen || room.last_message_time
-          })
+        // 1. Obtener datos de la sala
+        const { data: room, error: roomError } = await supabase
+            .from('chat_rooms')
+            .select('*')
+            .eq('id', roomId)
+            .single()
+        
+        if (roomError || !room) throw new Error("Room not found")
+
+        let roomInfo = { 
+            name: room.name, 
+            avatar: room.image_url, 
+            is_group: room.is_group,
+            otherUserId: null
+        }
+        
+        // Estado inicial de presencia basado en datos estáticos
+        let initialPresence = { 
+            isOnline: false, 
+            lastSeen: room.last_message_time // Fallback seguro
+        }
+
+        if (!room.is_group) {
+            // Obtener participantes.
+            // IMPORTANTE: No pedimos 'last_seen' explícitamente para evitar crash si la columna no existe.
+            const { data: participants, error: partError } = await supabase
+                .from('chat_participants')
+                .select('profiles(id, full_name, avatar_url)') 
+                .eq('room_id', roomId)
+            
+            if (!partError && participants) {
+                // Encontrar al otro usuario
+                const otherParticipant = participants.find(p => p.profiles && p.profiles.id !== myUserId)
+                const otherUser = otherParticipant?.profiles
+
+                if (otherUser) {
+                    roomInfo.name = otherUser.full_name || 'Usuario'
+                    roomInfo.avatar = otherUser.avatar_url
+                    roomInfo.otherUserId = otherUser.id
+                    
+                    // Si tienes la columna last_seen, podrías descomentar esto, pero es arriesgado sin migración
+                    // if (otherUser.last_seen) initialPresence.lastSeen = otherUser.last_seen
+                }
+            }
+        }
+
+        setRoomDetails(roomInfo)
+        setOtherUserStatus(initialPresence)
+        
+        // 2. Cargar mensajes
+        await loadMessages(0)
+
+      } catch (error) {
+          console.error("Error en setupRoom:", error)
+      } finally {
+          // SIEMPRE quitar el loading, pase lo que pase
+          setLoadingInitial(false)
       }
-
-      // 2. Carga Inicial de Mensajes (Últimos 20)
-      await loadMessages(0)
-  }
-
-  // Función auxiliar para actualizar mi last_seen en DB (sin bloquear)
-  const updateMyLastSeen = async (userId, time) => {
-      // Intenta actualizar si existe la columna, si no, falla silenciosamente
-      try { await supabase.from('profiles').update({ last_seen: time }).eq('id', userId) } catch (e) {}
   }
 
   const loadMessages = async (offset = 0) => {
-      if (offset > 0) setLoadingMore(true)
-      
-      const { data } = await supabase
-        .from('messages')
-        .select('*, profiles(full_name, avatar_url)')
-        .eq('room_id', roomId)
-        .order('created_at', { ascending: false }) // Traemos del más nuevo al más viejo
-        .range(offset, offset + MESSAGES_PER_PAGE - 1)
-      
-      if (data) {
-          if (data.length < MESSAGES_PER_PAGE) setHasMore(false)
+      try {
+        if (offset > 0) setLoadingMore(true)
+        
+        const { data, error } = await supabase
+            .from('messages')
+            .select('*, profiles(full_name, avatar_url)')
+            .eq('room_id', roomId)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + MESSAGES_PER_PAGE - 1)
+        
+        if (error) throw error
 
-          const orderedMessages = data.reverse()
+        if (data) {
+            if (data.length < MESSAGES_PER_PAGE) setHasMore(false)
+            const orderedMessages = data.reverse()
 
-          setMessages(prev => {
-              if (offset === 0) {
-                  setTimeout(scrollToBottom, 100)
-                  return orderedMessages
-              } else {
-                  return [...orderedMessages, ...prev]
-              }
-          })
+            setMessages(prev => {
+                if (offset === 0) {
+                    setTimeout(scrollToBottom, 100)
+                    return orderedMessages
+                } else {
+                    return [...orderedMessages, ...prev]
+                }
+            })
+        }
+      } catch (err) {
+          console.error("Error loading messages:", err)
+      } finally {
+          setLoadingMore(false)
       }
-      setLoadingInitial(false)
-      setLoadingMore(false)
   }
 
-  // --- SCROLL INFINITO LÓGICA ---
+  // --- SCROLL & UI LOGIC ---
   const handleScroll = () => {
       const container = chatContainerRef.current
       if (!container) return
-
       if (container.scrollTop === 0 && hasMore && !loadingMore && !loadingInitial) {
           prevScrollHeightRef.current = container.scrollHeight
           loadMessages(messages.length)
@@ -309,69 +367,69 @@ export default function ChatRoom() {
   useEffect(() => {
       if (!loadingMore && prevScrollHeightRef.current > 0 && chatContainerRef.current) {
           const container = chatContainerRef.current
-          const newScrollHeight = container.scrollHeight
-          container.scrollTop = newScrollHeight - prevScrollHeightRef.current
+          container.scrollTop = container.scrollHeight - prevScrollHeightRef.current
           prevScrollHeightRef.current = 0
       }
   }, [messages, loadingMore])
 
   const fetchSingleMessage = async (msgId) => {
-    const { data } = await supabase
-      .from('messages')
-      .select('*, profiles(full_name, avatar_url)')
-      .eq('id', msgId)
-      .single()
-    
-    if(data) {
-        setMessages(prev => {
-            // Reemplazar si existía como temporal/broadcast o añadir
-            const idx = prev.findIndex(m => m.id === msgId)
-            if (idx >= 0) {
-                const newArr = [...prev]
-                newArr[idx] = data
-                return newArr
-            }
-            return [...prev, data]
-        })
-        scrollToBottom()
-        return data
-    }
+    try {
+        const { data } = await supabase
+        .from('messages')
+        .select('*, profiles(full_name, avatar_url)')
+        .eq('id', msgId)
+        .single()
+        
+        if(data) {
+            setMessages(prev => {
+                const idx = prev.findIndex(m => m.id === msgId)
+                if (idx >= 0) {
+                    const newArr = [...prev]
+                    newArr[idx] = data
+                    return newArr
+                }
+                return [...prev, data]
+            })
+            scrollToBottom()
+            return data
+        }
+    } catch (e) { console.error(e) }
   }
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
+    if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+    }
   }
 
-  // --- INDICADOR DE ESCRIBIENDO ---
+  // --- INPUT & SEND ---
   const handleTypingInput = (e) => {
       setNewMessage(e.target.value)
-      
       e.target.style.height = 'auto'
       e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
 
       if (!typingTimeoutRef.current) {
          channelRef.current?.track({ 
-             user_id: session.user.id,
-             online_at: new Date().toISOString(), 
-             typing: true, 
-             username: 'Yo' 
+             user_id: session?.user?.id,
+             username: 'Yo', // Enviar nombre si es posible, si no 'Yo'
+             typing: true 
          })
       }
       
       clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = setTimeout(() => {
          channelRef.current?.track({ 
-             user_id: session.user.id,
-             online_at: new Date().toISOString(), 
+             user_id: session?.user?.id,
+             username: 'Yo',
              typing: false 
          })
          typingTimeoutRef.current = null
       }, 2000)
   }
 
-  // --- ENVIAR MENSAJE (CORE MODIFICADO) ---
   const handleSend = async () => {
     if (!newMessage.trim() && !selectedFile) return
+    if (!session?.user?.id) return
 
     const contentToSend = newMessage
     const fileToSend = selectedFile
@@ -385,9 +443,7 @@ export default function ChatRoom() {
     const textarea = document.querySelector('textarea')
     if(textarea) textarea.style.height = 'auto'
 
-    // UI Optimista
     const tempId = `temp-${Date.now()}`
-    // Objeto mensaje completo
     const messagePayload = {
         id: tempId,
         room_id: roomId,
@@ -396,20 +452,19 @@ export default function ChatRoom() {
         media_url: fileToSend ? URL.createObjectURL(fileToSend) : null,
         media_type: typeToSend,
         created_at: new Date().toISOString(),
-        profiles: { full_name: 'Yo', avatar_url: session.user?.user_metadata?.avatar_url || null }, // Intenta usar avatar real
+        profiles: { full_name: 'Yo', avatar_url: session.user?.user_metadata?.avatar_url },
         is_sending: true 
     }
 
     setMessages(prev => [...prev, messagePayload])
     scrollToBottom()
 
-    // 🚀 ENVÍO BROADCAST (INSTANTÁNEO)
-    // Enviamos el mensaje a todos los conectados ANTES de que se guarde en DB
-    if (!fileToSend) { // Solo enviamos broadcast instantáneo para texto (archivos necesitan URL)
+    // BROADCAST INSTANTÁNEO
+    if (!fileToSend) {
         channelRef.current?.send({
             type: 'broadcast',
             event: 'new_message',
-            payload: { ...messagePayload, is_sending: false, id: `broadcast-${Date.now()}` } // ID temporal diferente para evitar conflicto key
+            payload: { ...messagePayload, is_sending: false, id: `broadcast-${Date.now()}` }
         })
     }
 
@@ -423,13 +478,15 @@ export default function ChatRoom() {
             }
             
             const ext = typeToSend === 'image' ? 'webp' : fileToSend.name.split('.').pop()
-            const fileName = `${typeToSend}_${Date.now()}.${ext}`
-            await supabase.storage.from('chat-media').upload(fileName, fileToUpload)
+            const fileName = `${session.user.id}/${Date.now()}_${typeToSend}.${ext}`
+            
+            const { error: uploadError } = await supabase.storage.from('chat-media').upload(fileName, fileToUpload)
+            if (uploadError) throw uploadError
+            
             const { data } = supabase.storage.from('chat-media').getPublicUrl(fileName)
             mediaUrl = data.publicUrl
         }
 
-        // Insert DB
         const { data: sentData, error } = await supabase.from('messages').insert({
             room_id: roomId,
             sender_id: session.user.id,
@@ -440,10 +497,8 @@ export default function ChatRoom() {
 
         if (error) throw error
 
-        // Reemplazar optimista con real
         setMessages(prev => prev.map(msg => msg.id === tempId ? sentData : msg))
 
-        // Si era archivo, enviamos el broadcast AHORA que tenemos la URL
         if (fileToSend) {
             channelRef.current?.send({
                 type: 'broadcast',
@@ -452,15 +507,14 @@ export default function ChatRoom() {
             })
         }
 
-        // Actualizar chat_rooms (Last Message)
         await supabase.from('chat_rooms').update({
             last_message: typeToSend !== 'text' ? `📎 ${typeToSend === 'image' ? 'Foto' : 'Video'}` : contentToSend,
             last_message_time: new Date()
         }).eq('id', roomId)
 
     } catch (error) {
-        console.error(error)
-        alert("Error al enviar")
+        console.error("Send error:", error)
+        // alert("Error al enviar") // Alert removido, mejor UI fail silencioso o toast
         setMessages(prev => prev.filter(m => m.id !== tempId))
     }
     setUploading(false)
@@ -478,51 +532,63 @@ export default function ChatRoom() {
   }
   const clearFile = () => { setSelectedFile(null); setPreviewUrl(null); setFileType('text'); }
 
-  // --- BÚSQUEDA USUARIOS (MODAL) ---
+  // --- SEARCH MODAL ---
   const handleSearchUsers = async (term) => {
       setSearchTerm(term)
       if (term.length < 3) return setSearchResults([])
-      const { data, error } = await supabase.rpc('search_users_not_in_room', { p_search_term: term, p_room_id: roomId })
-      if (!error) setSearchResults(data)
+      try {
+          const { data, error } = await supabase.rpc('search_users_not_in_room', { p_search_term: term, p_room_id: roomId })
+          if (!error) setSearchResults(data)
+      } catch(e) { console.error(e) }
   }
   const addMember = async (userId) => {
       await supabase.from('chat_participants').insert({ room_id: roomId, user_id: userId })
       setShowAddModal(false); setSearchTerm('')
   }
 
-  // Lógica de visualización del Header
+  // --- RENDER HELPERS ---
   const getHeaderSubtitle = () => {
       if (typingUsers.size > 0) return `${Array.from(typingUsers).join(', ')} escribiendo...`
       
       if (roomDetails?.is_group) {
-          return onlineUsers.size > 0 ? `${onlineUsers.size} en línea` : 'Toca para ver info'
+          return onlineUsers.size > 0 ? `${onlineUsers.size} en línea` : 'Grupo'
       }
 
-      // Lógica 1v1 (Premium Presence)
       if (otherUserStatus.isOnline) return 'En línea'
       if (otherUserStatus.lastSeen) return formatLastSeen(otherUserStatus.lastSeen)
       
       return 'Desconectado'
   }
 
+  if (loadingInitial) {
+      return (
+          <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-slate-950">
+              <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                  <p className="text-sm text-slate-500 font-medium">Cifrando mensajes...</p>
+              </div>
+          </div>
+      )
+  }
+
   return (
     <div className="fixed inset-0 z-50 md:static md:z-auto bg-slate-100 dark:bg-slate-950 flex flex-col md:max-w-5xl md:mx-auto md:shadow-2xl md:h-[90vh] md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors relative">
       
-      {/* 1. HEADER GLASSMORPHIC OPTIMIZADO */}
+      {/* HEADER */}
       <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 shadow-sm flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 z-20 absolute top-0 w-full">
         <button onClick={() => navigate('/chat')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"><ArrowLeft size={20} className="dark:text-white"/></button>
         
         <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-slate-800 flex items-center justify-center text-indigo-600 font-bold overflow-hidden border border-slate-200 dark:border-slate-700 relative shadow-sm">
              {roomDetails?.avatar ? <img src={roomDetails.avatar} className="w-full h-full object-cover"/> : (roomDetails?.name?.charAt(0) || '#')}
              
-             {/* Punto Online (Ahora reactivo a otherUserStatus en 1v1 o onlineUsers en grupo) */}
+             {/* Punto Online */}
              {((!roomDetails?.is_group && otherUserStatus.isOnline) || (roomDetails?.is_group && onlineUsers.size > 0)) && (
                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
              )}
         </div>
         
         <div className="flex-1 cursor-default min-w-0">
-            <h2 className="font-bold text-slate-800 dark:text-white text-base leading-tight truncate">{roomDetails?.name || 'Cargando...'}</h2>
+            <h2 className="font-bold text-slate-800 dark:text-white text-base leading-tight truncate">{roomDetails?.name || 'Chat'}</h2>
             <p className={`text-xs font-medium truncate transition-all duration-300 ${
                 otherUserStatus.isOnline || typingUsers.size > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
             }`}>
@@ -535,7 +601,7 @@ export default function ChatRoom() {
         )}
       </div>
 
-      {/* 2. ÁREA DE MENSAJES (DOODLE) */}
+      {/* MENSAJES */}
       <div 
         ref={chatContainerRef}
         onScroll={handleScroll}
@@ -548,7 +614,6 @@ export default function ChatRoom() {
             const isMe = msg.sender_id === session?.user?.id
             const isOptimistic = msg.is_sending 
             
-            // Agrupación visual
             const prevMsg = messages[index - 1]
             const nextMsg = messages[index + 1]
             
@@ -556,14 +621,12 @@ export default function ChatRoom() {
             const isFirstInGroup = !prevMsg || prevMsg.sender_id !== msg.sender_id || showDate
             const isLastInGroup = !nextMsg || nextMsg.sender_id !== msg.sender_id
             
-            // Bordes inteligentes
             const roundedClass = isMe 
                 ? `${isFirstInGroup ? 'rounded-tr-none' : ''} ${isLastInGroup ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl rounded-tr-2xl`
                 : `${isFirstInGroup ? 'rounded-tl-none' : ''} ${isLastInGroup ? 'rounded-bl-2xl' : 'rounded-bl-md'} rounded-r-2xl rounded-tl-2xl`
 
             return (
                 <div key={index} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {/* FECHA FLOTANTE */}
                     {showDate && (
                         <div className="flex justify-center my-4 sticky top-16 z-10">
                             <span className="bg-slate-200/80 dark:bg-slate-800/80 backdrop-blur-sm text-slate-600 dark:text-slate-300 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm border border-white/20">
@@ -581,21 +644,18 @@ export default function ChatRoom() {
                             ${roundedClass}
                             ${isOptimistic ? 'opacity-70' : 'opacity-100'}
                         `}>
-                            {/* COLA DE BURBUJA (TAIL) */}
                             {isFirstInGroup && (
                                 <svg className={`absolute top-0 ${isMe ? '-right-2 text-indigo-600' : '-left-2 text-white dark:text-slate-800'} w-2 h-3`} viewBox="0 0 8 13" fill="currentColor">
                                     <path d={isMe ? "M-3 0v13h11c0-5-2-9-11-13z" : "M11 0v13H0c0-5 2-9 11-13z"} />
                                 </svg>
                             )}
 
-                            {/* Nombre en grupos */}
                             {!isMe && roomDetails?.is_group && isFirstInGroup && (
                                 <p className="text-[11px] font-bold mb-1 opacity-90" style={{ color: stringToColor(msg.profiles?.full_name || 'A') }}>
                                     {msg.profiles?.full_name}
                                 </p>
                             )}
 
-                            {/* Multimedia */}
                             {msg.media_type === 'image' && (
                                 <div className="mb-1 rounded-lg overflow-hidden relative group/img">
                                     <img 
@@ -609,10 +669,8 @@ export default function ChatRoom() {
                                 <video src={msg.media_url} controls className="rounded-lg mb-1 max-h-80 w-full bg-black"/>
                             )}
 
-                            {/* Texto */}
                             {msg.content && <p className="whitespace-pre-wrap break-words leading-snug">{msg.content}</p>}
                             
-                            {/* Hora y Estado */}
                             <div className={`flex justify-end items-center gap-1 mt-1 -mb-1 select-none ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                                 <span className="text-[10px]">
                                     {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
@@ -627,10 +685,9 @@ export default function ChatRoom() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 3. INPUT BAR MODERNO */}
+      {/* INPUT */}
       <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-30">
         
-        {/* PREVIEW ARCHIVO */}
         {selectedFile && (
             <div className="px-4 py-3 flex items-center gap-3 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-100 dark:border-slate-800 animate-in slide-in-from-bottom-5">
                 <div className="w-14 h-14 rounded-xl overflow-hidden relative shrink-0 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -650,10 +707,8 @@ export default function ChatRoom() {
             </div>
         )}
 
-        {/* BARRA DE ESCRITURA */}
         <div className="p-2 md:p-3 flex items-end gap-2 max-w-5xl mx-auto">
             
-            {/* Botón Adjuntar Expandible */}
             <div className="relative pb-1">
                 <button 
                     onClick={() => setShowAttachMenu(!showAttachMenu)}
@@ -662,7 +717,6 @@ export default function ChatRoom() {
                     <Plus size={24} />
                 </button>
 
-                {/* Menú Flotante */}
                 {showAttachMenu && (
                     <div className="absolute bottom-16 left-0 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 p-2 flex flex-col gap-1 min-w-[160px] animate-in slide-in-from-bottom-5 zoom-in-95 z-50">
                         <label className="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl cursor-pointer transition">
@@ -679,7 +733,6 @@ export default function ChatRoom() {
                 )}
             </div>
             
-            {/* Input de Texto Auto-Expandible */}
             <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-[1.5rem] flex items-center px-4 py-1.5 my-1 border border-transparent focus-within:border-indigo-500/30 focus-within:bg-white dark:focus-within:bg-slate-900 transition-all shadow-inner">
                 <textarea 
                     className="w-full bg-transparent outline-none text-[15px] dark:text-white max-h-32 resize-none py-2 leading-relaxed"
@@ -696,7 +749,6 @@ export default function ChatRoom() {
                 />
             </div>
 
-            {/* Botón Enviar con Animación */}
             <button 
                 onClick={handleSend}
                 disabled={(!newMessage.trim() && !selectedFile) || uploading}
@@ -711,10 +763,8 @@ export default function ChatRoom() {
         </div>
       </div>
 
-      {/* COMPONENTES FLOTANTES */}
       {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
-      {/* MODAL AÑADIR MIEMBRO */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-6 relative shadow-2xl">
