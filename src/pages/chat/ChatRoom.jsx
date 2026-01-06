@@ -444,9 +444,7 @@ const loadMessages = async (offset = 0) => {
         </div>
       )}
     </div>
-  )
-}
-// ... (Aquí termina el código de la Parte 1)
+  )}
 
   return (
     // CONTENEDOR PRINCIPAL: Full Screen en móvil (z-50) para tapar la navegación
