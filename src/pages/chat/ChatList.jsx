@@ -83,7 +83,6 @@ export default function ChatList() {
             const existingRoomIndex = prevRooms.findIndex(r => r.id === newRoomData.id)
             
             // Si NO es un chat mío (es de otros usuarios), LO IGNORAMOS.
-            // Esto detiene el error de "Recursos Insuficientes".
             if (existingRoomIndex === -1) return prevRooms;
 
             // 2. ACTUALIZACIÓN LOCAL (Sin peticiones de red)
@@ -117,7 +116,6 @@ export default function ChatList() {
 
   const fetchRooms = async (userId) => {
     // Solo mostramos loading si la lista está vacía (carga inicial)
-    // Esto evita parpadeos en futuras recargas
     setRooms(prev => {
         if (prev.length === 0) setLoading(true)
         return prev
@@ -209,7 +207,9 @@ export default function ChatList() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950 flex flex-col md:max-w-5xl md:mx-auto md:shadow-2xl md:min-h-[90vh] md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors">
+    // CAMBIO IMPORTANTE: 'fixed inset-0 z-50' fuerza a que este componente tape la barra de navegación en móvil.
+    // En desktop (md:) se comporta normal como una tarjeta.
+    <div className="fixed inset-0 z-50 md:static md:z-auto bg-white dark:bg-slate-950 flex flex-col md:max-w-5xl md:mx-auto md:shadow-2xl md:min-h-[90vh] md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors">
       
       {/* HEADER TIPO APP */}
       <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800 transition-all">
@@ -283,7 +283,7 @@ export default function ChatList() {
             </div>
         ) : (
             /* LISTA REAL */
-            <div className="pb-24 pt-1">
+            <div className="pb-4 pt-1">
                 {visibleRooms.map(room => {
                     // Calculamos si el mensaje es reciente (ej: hoy) para resaltarlo
                     const isRecent = new Date(room.last_message_time).toDateString() === new Date().toDateString();
