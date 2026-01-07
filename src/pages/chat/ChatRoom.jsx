@@ -5,7 +5,7 @@ import imageCompression from 'browser-image-compression'
 import { 
   Send, Image as ImageIcon, Loader2, ArrowLeft, Video, 
   UserPlus, X, Paperclip, Trash2, MoreVertical, Plus,
-  ChevronDown, Download, Maximize2
+  ChevronDown, Download, Maximize2, Sun, Moon // <--- Importamos Sun y Moon
 } from 'lucide-react'
 
 // --- CONSTANTES Y UTILS ---
@@ -53,7 +53,7 @@ function stringToColor(string) {
 const ImageLightbox = ({ src, onClose }) => {
     if (!src) return null;
     return (
-        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200">
             <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition">
                 <X size={24}/>
             </button>
@@ -84,6 +84,25 @@ export default function ChatRoom() {
   const [otherUserStatus, setOtherUserStatus] = useState({ isOnline: false, lastSeen: null })
   const typingTimeoutRef = useRef(null)
   const channelRef = useRef(null)
+
+  // --- TEMA (MODO NOCHE/CLARO) ---
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+      // Inicializar estado basado en la clase actual del documento
+      return document.documentElement.classList.contains('dark')
+  })
+
+  const toggleTheme = () => {
+      const isDark = document.documentElement.classList.contains('dark')
+      if (isDark) {
+          document.documentElement.classList.remove('dark')
+          localStorage.setItem('theme', 'light')
+          setIsDarkMode(false)
+      } else {
+          document.documentElement.classList.add('dark')
+          localStorage.setItem('theme', 'dark')
+          setIsDarkMode(true)
+      }
+  }
 
   // --- SCROLL INFINITO ---
   const [hasMore, setHasMore] = useState(true)
@@ -562,7 +581,7 @@ export default function ChatRoom() {
 
   if (loadingInitial) {
       return (
-          <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-slate-950">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
               <div className="flex flex-col items-center gap-2">
                   <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
                   <p className="text-sm text-slate-500 font-medium">Cifrando mensajes...</p>
@@ -572,7 +591,8 @@ export default function ChatRoom() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 md:static md:z-auto bg-slate-100 dark:bg-slate-950 flex flex-col md:max-w-5xl md:mx-auto md:shadow-2xl md:h-[90vh] md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors relative">
+    // CAMBIO AQUI: z-[100] para sobreponerse a la navbar y h-[100dvh] para altura móvil correcta
+    <div className="fixed inset-0 z-[100] h-[100dvh] bg-slate-100 dark:bg-slate-950 flex flex-col md:static md:z-auto md:h-[90vh] md:max-w-5xl md:mx-auto md:shadow-2xl md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors relative">
       
       {/* HEADER */}
       <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 shadow-sm flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 z-20 absolute top-0 w-full">
@@ -596,9 +616,19 @@ export default function ChatRoom() {
             </p>
         </div>
         
-        {roomDetails?.is_group && (
-            <button onClick={() => setShowAddModal(true)} className="p-2 bg-slate-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 rounded-full hover:bg-indigo-50 dark:hover:bg-slate-700 transition"><UserPlus size={20}/></button>
-        )}
+        {/* BOTONES DE ACCIÓN (Añadir + Tema) */}
+        <div className="flex items-center gap-2">
+            <button 
+                onClick={toggleTheme} 
+                className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            >
+                {isDarkMode ? <Sun size={20}/> : <Moon size={20}/>}
+            </button>
+
+            {roomDetails?.is_group && (
+                <button onClick={() => setShowAddModal(true)} className="p-2 bg-slate-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 rounded-full hover:bg-indigo-50 dark:hover:bg-slate-700 transition"><UserPlus size={20}/></button>
+            )}
+        </div>
       </div>
 
       {/* MENSAJES */}
