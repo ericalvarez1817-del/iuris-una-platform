@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom' // <--- IMPORTANTE: Importamos Portal
+import { createPortal } from 'react-dom' 
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import imageCompression from 'browser-image-compression'
@@ -119,6 +119,22 @@ export default function ChatRoom() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState([])
+
+  // --- GESTIÓN DE RECARGA ÚNICA ---
+  useEffect(() => {
+    // Verificamos si acabamos de hacer la recarga forzada
+    const justReloaded = sessionStorage.getItem('just_triggered_reload');
+    
+    if (justReloaded) {
+        // Si acabamos de recargar, consumimos la bandera para que la próxima navegación se considere "nueva entrada"
+        sessionStorage.removeItem('just_triggered_reload');
+        // MANTENEMOS la bandera 'has_reloaded_{roomId}' para no volver a recargar en esta sesión
+    } else {
+        // Si entramos por navegación normal (click en lista), reseteamos la bandera de la sala
+        // para permitir que el primer mensaje active la recarga.
+        sessionStorage.removeItem(`has_reloaded_${roomId}`);
+    }
+  }, [roomId]);
 
   // 1. INICIALIZACIÓN SEGURA
   useEffect(() => {
@@ -498,6 +514,16 @@ export default function ChatRoom() {
             last_message: typeToSend !== 'text' ? `📎 ${typeToSend === 'image' ? 'Foto' : 'Video'}` : contentToSend,
             last_message_time: new Date()
         }).eq('id', roomId)
+
+        // --- LÓGICA DE MICRO-RECARGA ---
+        const hasReloaded = sessionStorage.getItem(`has_reloaded_${roomId}`);
+        if (!hasReloaded) {
+            // Marcamos que ya se recargó para esta sala
+            sessionStorage.setItem(`has_reloaded_${roomId}`, 'true');
+            // Marcamos que ACABAMOS de activar la recarga para que el useEffect lo sepa
+            sessionStorage.setItem('just_triggered_reload', 'true');
+            window.location.reload();
+        }
 
     } catch (error) {
         console.error("Send error:", error)
