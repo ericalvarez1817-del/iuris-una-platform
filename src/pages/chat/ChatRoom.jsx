@@ -422,8 +422,16 @@ export default function ChatRoom() {
             const fileName = `${session.user.id}/${Date.now()}_${typeToSend}.${ext}`
             const { error: uploadError } = await supabase.storage.from('chat-media').upload(fileName, fileToUpload)
             if (uploadError) throw uploadError
-            const { data } = supabase.storage.from('chat-media').getPublicUrl(fileName)
-            mediaUrl = data.publicUrl
+            
+            // --- CAMBIO PARA BUCKET PRIVADO ---
+            // Usamos createSignedUrl en lugar de getPublicUrl
+            const { data, error: urlError } = await supabase.storage
+                .from('chat-media')
+                .createSignedUrl(fileName, 3153600000) // Válido por 100 años aprox
+            
+            if (urlError) throw urlError
+            mediaUrl = data.signedUrl
+            // ----------------------------------
         }
 
         const { data: sentData, error } = await supabase.from('messages').insert({
