@@ -53,7 +53,7 @@ function stringToColor(string) {
 const ImageLightbox = ({ src, onClose }) => {
     if (!src) return null;
     return (
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200">
             <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition">
                 <X size={24}/>
             </button>
@@ -581,7 +581,8 @@ export default function ChatRoom() {
 
   if (loadingInitial) {
       return (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+          // Aseguramos z-index muy alto en loading también
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
               <div className="flex flex-col items-center gap-2">
                   <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
                   <p className="text-sm text-slate-500 font-medium">Cifrando mensajes...</p>
@@ -591,8 +592,8 @@ export default function ChatRoom() {
   }
 
   return (
-    // CAMBIO AQUI: z-[100] para sobreponerse a la navbar y h-[100dvh] para altura móvil correcta
-    <div className="fixed inset-0 z-[100] h-[100dvh] bg-slate-100 dark:bg-slate-950 flex flex-col md:static md:z-auto md:h-[90vh] md:max-w-5xl md:mx-auto md:shadow-2xl md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors relative">
+    // CAMBIO AQUI: z-[9999] para forzar superposición sobre cualquier navbar (que suelen ser z-50 o z-100)
+    <div className="fixed inset-0 z-[9999] h-[100dvh] bg-slate-100 dark:bg-slate-950 flex flex-col md:static md:z-auto md:h-[90vh] md:max-w-5xl md:mx-auto md:shadow-2xl md:my-5 md:rounded-3xl md:overflow-hidden md:border dark:border-slate-800 transition-colors relative">
       
       {/* HEADER */}
       <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 shadow-sm flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 z-20 absolute top-0 w-full">
