@@ -122,16 +122,10 @@ export default function ChatRoom() {
 
   // --- GESTIÓN DE RECARGA ÚNICA ---
   useEffect(() => {
-    // Verificamos si acabamos de hacer la recarga forzada
     const justReloaded = sessionStorage.getItem('just_triggered_reload');
-    
     if (justReloaded) {
-        // Si acabamos de recargar, consumimos la bandera para que la próxima navegación se considere "nueva entrada"
         sessionStorage.removeItem('just_triggered_reload');
-        // MANTENEMOS la bandera 'has_reloaded_{roomId}' para no volver a recargar en esta sesión
     } else {
-        // Si entramos por navegación normal (click en lista), reseteamos la bandera de la sala
-        // para permitir que el primer mensaje active la recarga.
         sessionStorage.removeItem(`has_reloaded_${roomId}`);
     }
   }, [roomId]);
@@ -139,7 +133,6 @@ export default function ChatRoom() {
   // 1. INICIALIZACIÓN SEGURA
   useEffect(() => {
     let mounted = true;
-    
     const init = async () => {
         try {
             const { data: { session }, error } = await supabase.auth.getSession()
@@ -147,7 +140,6 @@ export default function ChatRoom() {
                 if (mounted) navigate('/auth')
                 return
             }
-            
             if (mounted) {
                 setSession(session)
                 if (roomId) await setupRoom(session.user.id)
@@ -157,7 +149,6 @@ export default function ChatRoom() {
             if (mounted) setLoadingInitial(false)
         }
     }
-
     init()
     return () => { mounted = false }
   }, [roomId])
@@ -165,7 +156,6 @@ export default function ChatRoom() {
   // 2. REALTIME
   useEffect(() => {
     if (!session?.user?.id || !roomId) return;
-
     if (channelRef.current) supabase.removeChannel(channelRef.current)
 
     const channel = supabase.channel(`room:${roomId}`, {
@@ -199,21 +189,16 @@ export default function ChatRoom() {
                              setMessages(current => current.map(m => m.id === payload.new.id ? fullMsg : m))
                         }
                     })
-                    newMessages[broadcastMatchIndex] = { 
-                        ...newMessages[broadcastMatchIndex], 
-                        id: payload.new.id, 
-                        is_broadcast: false 
-                    }
+                    newMessages[broadcastMatchIndex] = { ...newMessages[broadcastMatchIndex], id: payload.new.id, is_broadcast: false }
                     return newMessages
                 }
-
                 fetchSingleMessage(payload.new.id)
                 return prev
             })
         }
     )
 
-    // B. Broadcast (Mensajería Instantánea)
+    // B. Broadcast
     channel.on('broadcast', { event: 'new_message' }, (payload) => {
         const incomingMsg = payload.payload
         setMessages(prev => {
@@ -237,75 +222,47 @@ export default function ChatRoom() {
                 if (p.typing) typing.add(p.username || 'Alguien')
             })
         }
-        
         setOnlineUsers(online)
         setTypingUsers(typing)
-
-        setOtherUserStatus(prev => {
-             return {
-                 ...prev,
-                 isOnline: online.size > 0 
-             }
-        })
+        setOtherUserStatus(prev => ({ ...prev, isOnline: online.size > 0 }))
     })
 
     channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
         if (leftPresences.length > 0) {
-            setOtherUserStatus(prev => ({ 
-                isOnline: false, 
-                lastSeen: new Date().toISOString() 
-            }))
+            setOtherUserStatus(prev => ({ isOnline: false, lastSeen: new Date().toISOString() }))
         }
     })
 
     channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-            await channel.track({ 
-                user_id: session.user.id,
-                online_at: new Date().toISOString(), 
-                typing: false 
-            })
+            await channel.track({ user_id: session.user.id, online_at: new Date().toISOString(), typing: false })
         }
     })
 
     return () => supabase.removeChannel(channel)
   }, [roomId, session]) 
 
-  // --- SETUP ROOM ROBUSTO ---
+  // --- FUNCIONES SETUP & LOAD ---
   const setupRoom = async (myUserId) => {
       try {
         setLoadingInitial(true)
-
         const { data: room, error: roomError } = await supabase
-            .from('chat_rooms')
-            .select('*')
-            .eq('id', roomId)
-            .single()
+            .from('chat_rooms').select('*').eq('id', roomId).single()
         
         if (roomError || !room) throw new Error("Room not found")
 
         let roomInfo = { 
-            name: room.name, 
-            avatar: room.image_url, 
-            is_group: room.is_group,
-            otherUserId: null
+            name: room.name, avatar: room.image_url, is_group: room.is_group, otherUserId: null
         }
-        
-        let initialPresence = { 
-            isOnline: false, 
-            lastSeen: room.last_message_time 
-        }
+        let initialPresence = { isOnline: false, lastSeen: room.last_message_time }
 
         if (!room.is_group) {
             const { data: participants, error: partError } = await supabase
-                .from('chat_participants')
-                .select('profiles(id, full_name, avatar_url)') 
-                .eq('room_id', roomId)
+                .from('chat_participants').select('profiles(id, full_name, avatar_url)').eq('room_id', roomId)
             
             if (!partError && participants) {
                 const otherParticipant = participants.find(p => p.profiles && p.profiles.id !== myUserId)
                 const otherUser = otherParticipant?.profiles
-
                 if (otherUser) {
                     roomInfo.name = otherUser.full_name || 'Usuario'
                     roomInfo.avatar = otherUser.avatar_url
@@ -313,11 +270,9 @@ export default function ChatRoom() {
                 }
             }
         }
-
         setRoomDetails(roomInfo)
         setOtherUserStatus(initialPresence)
         await loadMessages(0)
-
       } catch (error) {
           console.error("Error en setupRoom:", error)
       } finally {
@@ -328,7 +283,6 @@ export default function ChatRoom() {
   const loadMessages = async (offset = 0) => {
       try {
         if (offset > 0) setLoadingMore(true)
-        
         const { data, error } = await supabase
             .from('messages')
             .select('*, profiles(full_name, avatar_url)')
@@ -337,11 +291,9 @@ export default function ChatRoom() {
             .range(offset, offset + MESSAGES_PER_PAGE - 1)
         
         if (error) throw error
-
         if (data) {
             if (data.length < MESSAGES_PER_PAGE) setHasMore(false)
             const orderedMessages = data.reverse()
-
             setMessages(prev => {
                 if (offset === 0) {
                     setTimeout(scrollToBottom, 100)
@@ -358,7 +310,6 @@ export default function ChatRoom() {
       }
   }
 
-  // --- SCROLL & UI LOGIC ---
   const handleScroll = () => {
       const container = chatContainerRef.current
       if (!container) return
@@ -379,10 +330,7 @@ export default function ChatRoom() {
   const fetchSingleMessage = async (msgId) => {
     try {
         const { data } = await supabase
-        .from('messages')
-        .select('*, profiles(full_name, avatar_url)')
-        .eq('id', msgId)
-        .single()
+        .from('messages').select('*, profiles(full_name, avatar_url)').eq('id', msgId).single()
         
         if(data) {
             setMessages(prev => {
@@ -406,27 +354,18 @@ export default function ChatRoom() {
     }
   }
 
-  // --- INPUT & SEND ---
+  // --- SEND MESSAGES ---
   const handleTypingInput = (e) => {
       setNewMessage(e.target.value)
       e.target.style.height = 'auto'
       e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
 
       if (!typingTimeoutRef.current) {
-         channelRef.current?.track({ 
-             user_id: session?.user?.id,
-             username: 'Yo', 
-             typing: true 
-         })
+         channelRef.current?.track({ user_id: session?.user?.id, username: 'Yo', typing: true })
       }
-      
       clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = setTimeout(() => {
-         channelRef.current?.track({ 
-             user_id: session?.user?.id,
-             username: 'Yo',
-             typing: false 
-         })
+         channelRef.current?.track({ user_id: session?.user?.id, username: 'Yo', typing: false })
          typingTimeoutRef.current = null
       }, 2000)
   }
@@ -479,13 +418,10 @@ export default function ChatRoom() {
                 const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' }
                 fileToUpload = await imageCompression(fileToSend, options)
             }
-            
             const ext = typeToSend === 'image' ? 'webp' : fileToSend.name.split('.').pop()
             const fileName = `${session.user.id}/${Date.now()}_${typeToSend}.${ext}`
-            
             const { error: uploadError } = await supabase.storage.from('chat-media').upload(fileName, fileToUpload)
             if (uploadError) throw uploadError
-            
             const { data } = supabase.storage.from('chat-media').getPublicUrl(fileName)
             mediaUrl = data.publicUrl
         }
@@ -518,9 +454,7 @@ export default function ChatRoom() {
         // --- LÓGICA DE MICRO-RECARGA ---
         const hasReloaded = sessionStorage.getItem(`has_reloaded_${roomId}`);
         if (!hasReloaded) {
-            // Marcamos que ya se recargó para esta sala
             sessionStorage.setItem(`has_reloaded_${roomId}`, 'true');
-            // Marcamos que ACABAMOS de activar la recarga para que el useEffect lo sepa
             sessionStorage.setItem('just_triggered_reload', 'true');
             window.location.reload();
         }
@@ -532,7 +466,7 @@ export default function ChatRoom() {
     setUploading(false)
   }
 
-  // --- HELPERS ARCHIVOS ---
+  // --- HELPERS ---
   const handleFileSelect = (e, type) => {
     if (e.target.files && e.target.files[0]) {
         const file = e.target.files[0]
@@ -559,43 +493,39 @@ export default function ChatRoom() {
 
   const getHeaderSubtitle = () => {
       if (typingUsers.size > 0) return `${Array.from(typingUsers).join(', ')} escribiendo...`
-      
       if (roomDetails?.is_group) {
           return onlineUsers.size > 0 ? `${onlineUsers.size} en línea` : 'Grupo'
       }
-
       if (otherUserStatus.isOnline) return 'En línea'
       if (otherUserStatus.lastSeen) return formatLastSeen(otherUserStatus.lastSeen)
-      
       return 'Desconectado'
   }
 
-  // BLOQUEO DE SCROLL
+  // Bloqueo scroll body
   useEffect(() => {
-    // Esto es crucial para que no haya doble barra de scroll en móviles
     document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = 'unset'
-    }
+    return () => { document.body.style.overflow = 'unset' }
   }, [])
 
+  // --- RENDERIZADO (LAYOUT FLEX PURO) ---
   const ChatContent = (
-    <div className="fixed inset-0 z-[9999] h-[100dvh] bg-slate-100 dark:bg-slate-950 flex flex-col md:fixed md:inset-0 md:bg-black/50 md:flex md:items-center md:justify-center transition-colors relative">
-      {/* WRAPPER DESKTOP PARA EFECTO MODAL */}
-      <div className="w-full h-full flex flex-col md:w-full md:max-w-5xl md:h-[90vh] md:bg-slate-100 md:dark:bg-slate-950 md:rounded-3xl md:overflow-hidden md:shadow-2xl md:border dark:border-slate-800 relative">
+    <div className="fixed inset-0 z-[9999] h-[100dvh] bg-slate-100 dark:bg-slate-950 flex flex-col md:fixed md:inset-0 md:bg-black/50 md:flex md:items-center md:justify-center transition-colors">
+      
+      {/* WRAPPER PRINCIPAL: Flex column para garantizar estructura */}
+      <div className="w-full h-full flex flex-col bg-slate-100 dark:bg-slate-950 md:w-full md:max-w-5xl md:h-[90vh] md:rounded-3xl md:overflow-hidden md:shadow-2xl md:border dark:border-slate-800 relative">
         
-        {/* HEADER */}
-        <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 shadow-sm flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 z-20 absolute top-0 w-full">
+        {/* HEADER: Flex-none para que no se encoja ni desaparezca */}
+        <div className="flex-none bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 shadow-sm flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 z-20">
             <button onClick={() => navigate('/chat')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"><ArrowLeft size={20} className="dark:text-white"/></button>
             
-            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-slate-800 flex items-center justify-center text-indigo-600 font-bold overflow-hidden border border-slate-200 dark:border-slate-700 relative shadow-sm">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-slate-800 flex items-center justify-center text-indigo-600 font-bold overflow-hidden border border-slate-200 dark:border-slate-700 relative shadow-sm shrink-0">
                 {roomDetails?.avatar ? <img src={roomDetails.avatar} className="w-full h-full object-cover"/> : (roomDetails?.name?.charAt(0) || '#')}
                 {((!roomDetails?.is_group && otherUserStatus.isOnline) || (roomDetails?.is_group && onlineUsers.size > 0)) && (
                     <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
                 )}
             </div>
             
-            <div className="flex-1 cursor-default min-w-0">
+            <div className="flex-1 min-w-0">
                 <h2 className="font-bold text-slate-800 dark:text-white text-base leading-tight truncate">{roomDetails?.name || 'Cargando...'}</h2>
                 <p className={`text-xs font-medium truncate transition-all duration-300 ${
                     otherUserStatus.isOnline || typingUsers.size > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
@@ -604,7 +534,7 @@ export default function ChatRoom() {
                 </p>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
                 <button onClick={toggleTheme} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition">
                     {isDarkMode ? <Sun size={20}/> : <Moon size={20}/>}
                 </button>
@@ -624,10 +554,11 @@ export default function ChatRoom() {
             </div>
         ) : (
             <>
+                {/* ÁREA DE MENSAJES: Flex-1 para ocupar el espacio restante */}
                 <div 
                     ref={chatContainerRef}
                     onScroll={handleScroll}
-                    className="flex-1 overflow-y-auto pt-20 pb-4 px-2 md:px-4 space-y-1 bg-[#e5ddd5] dark:bg-slate-950 scroll-smooth"
+                    className="flex-1 overflow-y-auto px-2 md:px-4 pt-4 pb-4 space-y-1 bg-[#e5ddd5] dark:bg-slate-950 scroll-smooth"
                     style={{ backgroundImage: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')", backgroundBlendMode: 'overlay' }}
                 >
                     {loadingMore && <div className="text-center py-2"><Loader2 className="animate-spin inline text-indigo-600" size={20}/></div>}
@@ -650,7 +581,7 @@ export default function ChatRoom() {
                         return (
                             <div key={index} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 {showDate && (
-                                    <div className="flex justify-center my-4 sticky top-16 z-10">
+                                    <div className="flex justify-center my-4 sticky top-4 z-10 pointer-events-none">
                                         <span className="bg-slate-200/80 dark:bg-slate-800/80 backdrop-blur-sm text-slate-600 dark:text-slate-300 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm border border-white/20">
                                             {getMessageDateLabel(msg.created_at)}
                                         </span>
@@ -707,7 +638,8 @@ export default function ChatRoom() {
                     <div ref={messagesEndRef} />
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-30">
+                {/* INPUT BAR: Flex-none para mantenerse fijo abajo */}
+                <div className="flex-none bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-30">
                     {selectedFile && (
                         <div className="px-4 py-3 flex items-center gap-3 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-100 dark:border-slate-800 animate-in slide-in-from-bottom-5">
                             <div className="w-14 h-14 rounded-xl overflow-hidden relative shrink-0 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -816,6 +748,5 @@ export default function ChatRoom() {
     </div>
   )
 
-  // RENDER FINAL CON PORTAL EN BODY
   return createPortal(ChatContent, document.body)
 }
