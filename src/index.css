@@ -1,155 +1,204 @@
+/* Importamos fuentes: Inter (UI Moderna) y Playfair Display (Toque Jurídico/Serio) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* --- ESTILOS GENERALES Y UTILIDADES --- */
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
 
-/* Transiciones suaves para modo oscuro */
-html {
-  transition: background-color 0.3s, color 0.3s;
+  /* Títulos con fuente Serif para autoridad legal */
+  h1, h2, h3, h4 {
+    font-family: 'Playfair Display', serif;
+    @apply tracking-tight;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 transition-colors duration-300 antialiased overflow-x-hidden;
+  }
+
+  /* Modo Oscuro Base */
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  /* Selección de texto elegante */
+  ::selection {
+    @apply bg-indigo-500/20 text-indigo-700 dark:bg-indigo-400/20 dark:text-indigo-300;
+  }
 }
 
-html, body {
-  height: 100%;
-  background-color: #f8fafc; /* slate-50 */
-  color: #0f172a; /* slate-900 */
+@layer components {
+  /* Botones con efecto 'Press' */
+  .btn-press {
+    @apply active:scale-95 transition-transform duration-100;
+  }
+  
+  /* Inputs Premium */
+  .input-primary {
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all duration-200;
+  }
 }
 
-/* Modo Oscuro */
-html.dark body {
-  background-color: #0f172a; /* slate-900 */
-  color: #f1f5f9; /* slate-100 */
+@layer utilities {
+  /* --- SCROLLBARS PERSONALIZADOS --- */
+  /* Webkit (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 dark:bg-slate-600;
+  }
+
+  /* Ocultar scrollbar pero permitir funcionalidad */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  /* --- EFECTOS VISUALES --- */
+  
+  /* Cristal Esmerilado (Glassmorphism) */
+  .glass {
+    @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20 dark:border-slate-800/50 supports-[backdrop-filter]:bg-white/60;
+  }
+
+  /* Gradiente Dorado (Para textos premium) */
+  .text-gradient-gold {
+    @apply bg-gradient-to-r from-amber-600 to-yellow-500 bg-clip-text text-transparent;
+  }
+
+  /* Sombra suave para tarjetas */
+  .shadow-soft {
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Safe Areas para móviles (iPhone notch/home bar) */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  /* Máscaras de desvanecimiento */
+  .mask-gradient-x {
+    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+  }
 }
 
-/* --- UTILIDADES RECUPERADAS (Para que no se rompa la navegación) --- */
+/* --- DRIVER.JS PREMIUM (Tour Guiado) --- */
 
-/* Ocultar barra de scroll pero permitir deslizar (Usado en el menú inferior) */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
-
-/* Áreas seguras para iPhone (notch/barra inferior) */
-.safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-/* --- ✨ MAGIA DEL TOUR GUIADO (DRIVER.JS PREMIUM) ✨ --- */
-
-/* 1. Animación de entrada (Efecto "Pop") */
 @keyframes tourPopIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.9) translateY(10px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+  0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* 2. Contenedor Principal (Caja de Cristal) */
 .driver-popover {
-  background-color: rgba(15, 23, 42, 0.85) !important; /* Slate-900 al 85% */
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  
+  background-color: rgba(15, 23, 42, 0.95) !important; /* Casi opaco para legibilidad */
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   color: white;
-  border-radius: 20px !important;
+  border-radius: 16px !important;
   padding: 24px !important;
-  
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-shadow: 
-    0 20px 40px -10px rgba(0, 0, 0, 0.6),
-    0 0 15px rgba(79, 70, 229, 0.2) !important;
-  
-  animation: tourPopIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  max-width: 320px !important;
+    0 20px 40px -10px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255,255,255,0.05) !important;
+  animation: tourPopIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  max-width: 340px !important;
 }
 
-/* 3. Título (Dorado) */
 .driver-popover-title {
-  font-size: 20px !important;
-  font-weight: 900 !important;
-  margin-bottom: 10px !important;
-  background: linear-gradient(to right, #fbbf24, #f59e0b);
+  font-family: 'Playfair Display', serif !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  margin-bottom: 8px !important;
+  background: linear-gradient(to right, #fbbf24, #d97706); /* Amber-400 to Amber-600 */
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.01em;
 }
 
-/* 4. Descripción */
 .driver-popover-description {
+  font-family: 'Inter', sans-serif !important;
   font-size: 15px !important;
   line-height: 1.6 !important;
-  color: #e2e8f0 !important;
+  color: #cbd5e1 !important; /* Slate-300 */
   font-weight: 400;
   margin-bottom: 24px !important;
 }
 
-/* 5. Botones (Gradiente Índigo) */
+/* Botones del Tour */
 .driver-popover-footer button {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
   color: white !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
   border: none !important;
-  border-radius: 12px !important;
-  padding: 12px 24px !important;
-  font-weight: 700 !important;
-  font-size: 14px !important;
-  letter-spacing: 0.5px;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4) !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 10px !important;
+  padding: 10px 20px !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
+  transition: all 0.2s ease !important;
   flex: 1;
 }
 
 .driver-popover-footer button:hover {
-  transform: translateY(-2px) !important;
-  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.5) !important;
-  filter: brightness(1.1);
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4) !important;
 }
 
-.driver-popover-footer button:active {
-  transform: translateY(0) scale(0.98) !important;
-}
-
-/* Botón Atrás (Transparente) */
 .driver-popover-footer .driver-popover-prev-btn {
   background: transparent !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: #cbd5e1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #94a3b8 !important; /* Slate-400 */
   box-shadow: none !important;
 }
 
 .driver-popover-footer .driver-popover-prev-btn:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: white !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
   color: white !important;
-  transform: translateY(-1px) !important;
 }
 
-/* 6. Flecha de la caja */
+/* Flecha del Popover */
 .driver-popover-arrow {
-  border-width: 8px !important;
+  border-width: 6px !important;
 }
-.driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: rgba(15, 23, 42, 0.9) !important; }
-.driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: rgba(15, 23, 42, 0.9) !important; }
-.driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: rgba(15, 23, 42, 0.9) !important; }
-.driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: rgba(15, 23, 42, 0.9) !important; }
+.driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: rgba(15, 23, 42, 0.95) !important; }
+.driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: rgba(15, 23, 42, 0.95) !important; }
+.driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: rgba(15, 23, 42, 0.95) !important; }
+.driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: rgba(15, 23, 42, 0.95) !important; }
 
-/* Layout Footer */
 .driver-popover-navigation-btns {
   display: flex !important;
-  gap: 12px !important;
+  gap: 10px !important;
   justify-content: flex-end !important;
 }
 
-/* Ocultar texto de progreso default */
 .driver-popover-progress-text {
   color: #64748b !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
   font-weight: 600 !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
