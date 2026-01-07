@@ -398,89 +398,112 @@ export default function NewsFeed() {
         </div>
       )}
 
-      {/* MODAL CREAR NOTICIA */}
+      {/* MODAL CREAR NOTICIA MEJORADO */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative border border-slate-200 dark:border-slate-800 overflow-hidden">
-                {/* Fondo decorativo */}
-                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+            <div className="bg-white dark:bg-slate-950 w-full max-w-lg rounded-[2.5rem] shadow-2xl relative border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
                 
-                <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 p-2 bg-slate-50 dark:bg-slate-800 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition"><X size={20}/></button>
+                {/* Header */}
+                <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm sticky top-0 z-10">
+                    <div>
+                        <h2 className="font-black text-xl text-slate-900 dark:text-white">Nueva Publicación</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Comparte con la comunidad IURIS</p>
+                    </div>
+                    <button onClick={() => setShowModal(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition"><X size={20}/></button>
+                </div>
                 
-                <h2 className="font-black text-2xl text-slate-900 dark:text-white mb-2">Crear Noticia</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">Comparte información relevante con toda la facultad.</p>
-                
-                <div className="space-y-5">
+                <div className="overflow-y-auto p-8 space-y-8 custom-scrollbar">
+                    
+                    {/* Título - Estilo Editorial */}
                     <div className="group">
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 group-focus-within:text-indigo-500 transition-colors">Título</label>
-                        <input 
-                            className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold text-slate-900 dark:text-white border-2 border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all placeholder:text-slate-400 placeholder:font-normal" 
-                            placeholder="Escribe un titular llamativo..." 
+                        <label className="block text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-2">Titular</label>
+                        <textarea 
+                            rows={2}
+                            className="w-full bg-transparent text-3xl font-black text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-700 outline-none resize-none leading-tight" 
+                            placeholder="Escribe un título impactante aquí..." 
                             value={form.title}
                             onChange={e => setForm({...form, title: e.target.value})}
                         />
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="group">
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 group-focus-within:text-indigo-500 transition-colors">Categoría</label>
-                            <div className="relative">
-                                <select 
-                                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold text-slate-700 dark:text-slate-200 border-2 border-transparent focus:border-indigo-500 cursor-pointer appearance-none" 
-                                    value={form.category} 
-                                    onChange={e => setForm({...form, category: e.target.value})}
+
+                    {/* Categorías - Visual Pills */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Categoría</label>
+                        <div className="flex flex-wrap gap-2">
+                            {['UNA', 'JURIDICO', 'SOCIALES'].map((cat) => (
+                                <button
+                                    key={cat}
+                                    onClick={() => setForm({...form, category: cat})}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all duration-200 flex items-center gap-2 ${
+                                        form.category === cat 
+                                        ? getCategoryStyles(cat).replace('bg-', 'bg-').replace('text-', 'text-') + ' ring-2 ring-offset-2 ring-indigo-500 dark:ring-offset-slate-950 scale-105'
+                                        : 'bg-slate-50 dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    }`}
                                 >
-                                    <option value="UNA">🏛️ UNA</option>
-                                    <option value="JURIDICO">⚖️ Jurídico</option>
-                                    <option value="SOCIALES">🎉 Sociales</option>
-                                </select>
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                    <ChevronRight size={16} className="rotate-90"/>
-                                </div>
-                            </div>
+                                    {getCategoryIcon(cat)}
+                                    {cat}
+                                </button>
+                            ))}
                         </div>
-                        <div>
-                             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Multimedia</label>
-                             <label className="flex items-center justify-center w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:border-indigo-400 transition-all h-[60px] group">
-                                <span className="text-xs font-bold text-slate-500 group-hover:text-indigo-500 flex items-center gap-2 truncate transition-colors">
-                                    <ImageIcon size={18}/> {form.image ? 'Cambiar' : 'Subir Foto'}
-                                </span>
+                    </div>
+
+                    {/* Contenido - Editor Style */}
+                    <div className="group">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Cuerpo de la noticia</label>
+                        <div className="relative">
+                            <textarea 
+                                className="w-full bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-6 text-base text-slate-700 dark:text-slate-300 leading-relaxed outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all min-h-[200px] resize-none font-serif" 
+                                placeholder="Escribe el contenido detallado de tu noticia..." 
+                                value={form.content}
+                                onChange={e => setForm({...form, content: e.target.value})}
+                            />
+                            {/* Decorative line */}
+                            <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-slate-200 dark:bg-slate-800"></div>
+                        </div>
+                    </div>
+
+                    {/* Multimedia Upload */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Multimedia</label>
+                        
+                        {!previewImage ? (
+                            <label className="group flex flex-col items-center justify-center w-full h-40 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 cursor-pointer hover:border-indigo-500 dark:hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-all duration-300">
+                                <div className="p-4 bg-white dark:bg-slate-800 rounded-full shadow-sm mb-3 group-hover:scale-110 transition-transform">
+                                    <ImageIcon size={24} className="text-indigo-500"/>
+                                </div>
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Añadir imagen de portada</span>
+                                <span className="text-xs text-slate-400 mt-1">PNG, JPG, WEBP (Max 5MB)</span>
                                 <input type="file" className="hidden" accept="image/*" onChange={handleImageSelect}/>
                             </label>
-                        </div>
-                    </div>
-
-                    {previewImage && (
-                        <div className="relative w-full h-40 rounded-2xl overflow-hidden group shadow-md border border-slate-200 dark:border-slate-700">
-                            <img src={previewImage} className="w-full h-full object-cover"/>
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <button 
-                                    onClick={() => {setForm({...form, image: null}); setPreviewImage(null)}}
-                                    className="bg-red-500 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform"
-                                >
-                                    <Trash2 size={20}/>
-                                </button>
+                        ) : (
+                            <div className="relative w-full h-56 rounded-3xl overflow-hidden group shadow-lg">
+                                <img src={previewImage} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"/>
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm">
+                                    <label className="p-3 bg-white/20 hover:bg-white/30 text-white rounded-full cursor-pointer backdrop-blur-md transition-all hover:scale-110">
+                                        <ImageIcon size={20}/>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleImageSelect}/>
+                                    </label>
+                                    <button 
+                                        onClick={() => {setForm({...form, image: null}); setPreviewImage(null)}}
+                                        className="p-3 bg-red-500/80 hover:bg-red-500 text-white rounded-full backdrop-blur-md transition-all hover:scale-110"
+                                    >
+                                        <Trash2 size={20}/>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    )}
-
-                    <div className="group">
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 group-focus-within:text-indigo-500 transition-colors">Contenido</label>
-                        <textarea 
-                            className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none text-sm text-slate-800 dark:text-slate-200 border-2 border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all h-32 resize-none leading-relaxed placeholder:text-slate-400" 
-                            placeholder="Desarrolla la noticia aquí..." 
-                            value={form.content}
-                            onChange={e => setForm({...form, content: e.target.value})}
-                        />
+                        )}
                     </div>
-                    
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 sticky bottom-0 z-10">
                     <button 
                         onClick={handlePublish} 
                         disabled={uploading} 
-                        className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black rounded-2xl uppercase tracking-widest shadow-lg shadow-indigo-500/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
+                        className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-indigo-500/20 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3 group"
                     >
                         {uploading ? <Loader2 className="animate-spin" size={20}/> : (
-                            <>Publicar <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
+                            <>Publicar Noticia <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
                         )}
                     </button>
                 </div>
@@ -493,6 +516,11 @@ export default function NewsFeed() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .mask-gradient-right { -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%); }
         .drop-cap:first-letter { font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif; }
+        /* Scrollbar personalizada para el modal */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.3); border-radius: 20px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(71, 85, 105, 0.3); }
       `}</style>
     </div>
   )
