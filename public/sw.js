@@ -1,4 +1,3 @@
-// public/sw.js
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 
 // -------------------------------------------------------------------------
@@ -11,51 +10,64 @@ precacheAndRoute(self.__WB_MANIFEST)
 // LÓGICA DE NOTIFICACIONES "HÍBRIDA" (Chat + Noticias)
 // -------------------------------------------------------------------------
 self.addEventListener('push', function(event) {
-  console.log('¡Push recibido!');
+  console.log('¡Push recibido en SW!');
 
-  // Valores por defecto
-  let data = { title: 'IURIS UNA', body: 'Nueva notificación', url: '/', icon: '/pwa-192x192.png' };
+  // 1. Parsear datos (con valores por defecto seguros)
+  let data = { 
+    title: 'IURIS UNA', 
+    body: 'Nueva notificación', 
+    url: '/', 
+    icon: '/icons/icon-192x192.png', // Ajustado a la ruta estándar de Vite PWA
+    badge: '/icons/icon-192x192.png'
+  };
   
   try {
     if (event.data) {
       const json = event.data.json();
       data = { ...data, ...json };
     }
-  } catch (e) { console.log('Error parseando JSON'); }
+  } catch (e) { console.log('Error parseando JSON del Push', e); }
 
-  // Detectamos si es PRIORITARIA (Noticia)
+  // 2. Detectar Prioridad
   const isPriority = data.priority === 'high';
 
   const options = {
     body: data.body,
-    icon: data.icon,         
-    badge: '/pwa-192x192.png',
+    icon: data.icon,        
+    badge: data.badge, // Icono monocromático para Android
 
     // --- 🖼️ VISUAL (Solo Noticias) ---
-    // Si viene una imagen (data.image), se muestra GIGANTE (Big Picture Style) en Android
     image: data.image || null, 
 
     // --- 📳 COMPORTAMIENTO ---
-    // Si es Prioridad: Vibrate como loco (500ms). Si es Chat: Cortito (200ms).
+    // High: Vibra fuerte. Chat: Vibra corto.
     vibrate: isPriority ? [500, 200, 500, 200, 500] : [200, 100, 200],
     
-    // Si es Prioridad: NO DESAPARECE SOLA. El usuario debe descartarla.
+    // High: Persistente hasta que el usuario interactúe.
     requireInteraction: isPriority, 
     
-    tag: data.tag || 'general', // 'news-alert' o 'chat-123'
+    // Agrupación (para no llenar la barra de notificaciones)
+    tag: data.tag || 'general', 
     renotify: true,
 
-    // --- 🔘 BOTONES DE ACCIÓN (Solo Noticias) ---
+    // --- 🔘 BOTONES DE ACCIÓN (Solo Noticias Prioritarias) ---
     actions: isPriority ? [
       { action: 'open', title: '👀 Leer ahora' },
       { action: 'close', title: '❌ Cerrar' }
     ] : [],
 
+    // Datos que viajan al hacer clic
     data: {
       url: data.url
     }
   };
 
+  // 3. 🔥 COMUNICACIÓN CON LA APP (NUEVO)
+  // Esto avisa a la pestaña abierta (si existe) para mostrar Toasts o actualizar UI en tiempo real
+  const channel = new BroadcastChannel('push-messages');
+  channel.postMessage({ title: data.title, ...options });
+
+  // 4. Mostrar la notificación nativa
   event.waitUntil(
     self.registration.showNotification(data.title, options)
   );
@@ -65,25 +77,26 @@ self.addEventListener('push', function(event) {
 // CLIC EN NOTIFICACIÓN
 // -------------------------------------------------------------------------
 self.addEventListener('notificationclick', function(event) {
-  event.notification.close(); // Siempre cerrar primero la alerta visual
+  event.notification.close(); // Cerrar la alerta visual inmediatamente
 
-  // Si el usuario le dio al botón de "Cerrar" (X), no abrimos nada.
+  // Acción específica de cerrar
   if (event.action === 'close') return;
 
-  // Si le dio al cuerpo o a "Leer ahora", abrimos la App
+  const urlToOpen = event.notification.data?.url || '/';
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      // 1. Si la app ya está abierta, la enfocamos y navegamos
+      // 1. Buscar si la app ya está abierta
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
         if ('focus' in client) {
-          // Si ya está abierta, enfocamos y redirigimos a la URL correcta (ej: /news)
-          return client.focus().then(c => c.navigate(event.notification.data.url)); 
+          // Enfocamos la pestaña y navegamos a la URL interna
+          return client.focus().then(c => c.navigate(urlToOpen)); 
         }
       }
-      // 2. Si no, abrimos ventana nueva
+      // 2. Si no hay pestañas, abrir una nueva
       if (clients.openWindow) {
-        return clients.openWindow(event.notification.data.url);
+        return clients.openWindow(urlToOpen);
       }
     })
   );

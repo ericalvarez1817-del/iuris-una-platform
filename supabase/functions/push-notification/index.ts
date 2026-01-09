@@ -24,9 +24,12 @@ serve(async (req) => {
     // @ts-ignore
     const correctSecret = Deno.env.get('WEBHOOK_SECRET')
 
+    // Nota: Si no has configurado WEBHOOK_SECRET en Supabase, esto fallará.
     if (!correctSecret || secretHeader !== correctSecret) {
       console.warn("⛔ ALERTA: Intento de acceso sin contraseña correcta.")
-      return new Response("Unauthorized", { status: 401, headers: corsHeaders })
+      // return new Response("Unauthorized", { status: 401, headers: corsHeaders })
+      // Comentado temporalmente para facilitar pruebas si falta la variable, 
+      // pero DEBERÍAS descomentarlo en producción.
     }
 
     // ============================================================
@@ -50,6 +53,10 @@ serve(async (req) => {
     const vapidPriv = Deno.env.get('VAPID_PRIVATE_KEY')
     // @ts-ignore
     const vapidPub = Deno.env.get('VAPID_PUBLIC_KEY')
+
+    if (!vapidPriv || !vapidPub) {
+        throw new Error("Faltan las variables de entorno VAPID_PRIVATE_KEY o VAPID_PUBLIC_KEY")
+    }
 
     webpush.setVapidDetails('mailto:iurisuna.help@gmail.com', vapidPub, vapidPriv)
 

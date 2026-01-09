@@ -7,8 +7,9 @@ import { supabase } from './lib/supabase'
 // 2. IMPORTAMOS EL AIRBAG
 import ErrorBoundary from './components/ErrorBoundary'
 
-// 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES
-import { initNotifications } from './lib/notifications'
+// 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES (ACTUALIZADO)
+// Reemplazamos initNotifications por las funciones reales de Firebase
+import { requestNotificationPermission, onMessageListener } from './lib/notifications'
 
 // --- NUEVA IMPORTACIÓN PARA EL TEMA ---
 import useTheme from './hooks/useTheme'
@@ -49,9 +50,25 @@ import LawReader from './pages/laws/LawReader'
 function AppRoutes() {
   const navigate = useNavigate();
 
-  // 1. INICIALIZAR NOTIFICACIONES WEB
+  // 1. CONFIGURACIÓN DE NOTIFICACIONES (ACTUALIZADO)
   useEffect(() => {
-    initNotifications(); 
+    // A. Verificar sesión inicial para pedir permisos si ya está logueado
+    // Esto asegura que si recargas la página, vuelva a verificar el token
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) {
+        requestNotificationPermission(session.user.id);
+      }
+    });
+
+    // B. Activar listener para mensajes en PRIMER PLANO (cuando usas la app)
+    // Esto mostrará en consola cuando llegue algo mientras usas la app
+    onMessageListener()
+      .then((payload) => {
+        console.log('🔔 Notificación recibida en primer plano:', payload);
+        // Opcional: Aquí podrías disparar un toast o alerta
+        // alert(`Nuevo mensaje: ${payload.notification.title}`);
+      })
+      .catch((err) => console.log('Error iniciando listener de notificaciones:', err));
   }, []);
 
   // 2. ESCUCHA DE SESIÓN
@@ -60,6 +77,11 @@ function AppRoutes() {
       console.log(`🔐 Evento Web: ${event}`);
       
       if (event === 'SIGNED_IN' && session) {
+        // Pedir permiso de notificaciones al iniciar sesión (Login exitoso)
+        if (session?.user?.id) {
+          requestNotificationPermission(session.user.id);
+        }
+
         if (window.location.pathname === '/') {
            navigate('/dashboard', { replace: true });
         }
