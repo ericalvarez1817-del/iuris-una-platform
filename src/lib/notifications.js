@@ -1,13 +1,13 @@
 import { supabase } from './supabase';
 
-// TU CLAVE PÚBLICA VAPID (La misma que tienes en el backend)
+// TU CLAVE PÚBLICA VAPID (Debe coincidir con la del backend Robot V7)
 const VAPID_PUBLIC_KEY = "BP03duRRVc6IwZwHMr5UrmKq3a9uw74lzBHBIbNPicQcyWVKpqpLLaAPSuPMZTi05F8zlSbxgAt2nRk_BlVcTps";
 
-// Utilidad para convertir la clave VAPID de string a ArrayBuffer
+// Utilidad para convertir la clave VAPID de string a ArrayBuffer (Requisito del navegador)
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding)
-    .replace(/\-/g, '+')
+    .replace(/-/g, '+')
     .replace(/_/g, '/');
 
   const rawData = window.atob(base64);
@@ -20,51 +20,54 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // --------------------------------------------------------------------
-// FUNCIÓN PRINCIPAL: Pide permiso y suscribe al usuario
+// 1. SOLICITAR PERMISO Y SUSCRIBIRSE (NATIVO / ROBOT V7)
 // --------------------------------------------------------------------
 export const requestNotificationPermission = async (userId) => {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('⚠️ Las notificaciones Push no son soportadas en este navegador.');
+    console.warn('⚠️ Push API no soportada en este navegador.');
     return;
   }
 
   try {
-    console.log('🔔 Solicitando permiso de notificaciones (Web Push)...');
+    console.log('🔔 Solicitando permiso nativo...');
     
-    // Paso A: Pedir permiso
+    // Paso A: Permiso del navegador
     const permission = await Notification.requestPermission();
 
     if (permission === 'granted') {
       console.log('✅ Permiso concedido.');
-      
-      // Paso B: Registrar el Service Worker Estándar
+
+      // Paso B: Registrar el Service Worker Nativo ('sw.js')
+      // IMPORTANTE: Asegúrate de que el archivo public/sw.js existe
       const registration = await navigator.serviceWorker.register('/sw.js');
       
-      // Paso C: Crear la suscripción
+      // Paso C: Crear la suscripción con las llaves de seguridad
+      // Esto genera el "endpoint", "p256dh" y "auth" que necesita el Backend
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
 
-      console.log('🎟️ Suscripción generada:', subscription);
+      console.log('🎟️ Suscripción Nativa Generada');
 
-      // Paso D: Guardar en la tabla push_subscriptions
+      // Paso D: Guardar en Supabase para el Robot V7
       await saveSubscriptionToDatabase(subscription, userId);
 
     } else {
       console.log('🚫 Permiso denegado.');
     }
   } catch (error) {
-    console.error('❌ Error al suscribirse:', error);
+    console.error('❌ Error suscripción:', error);
   }
 };
 
 // --------------------------------------------------------------------
-// AUXILIAR: Guardar en Supabase (Tabla push_subscriptions)
+// 2. GUARDAR EN SUPABASE (Tabla push_subscriptions)
 // --------------------------------------------------------------------
 const saveSubscriptionToDatabase = async (subscription, userId) => {
   if (!userId) return;
 
+  // Extraemos las llaves de encriptación del objeto nativo
   const subData = subscription.toJSON();
 
   const { error } = await supabase
@@ -77,34 +80,31 @@ const saveSubscriptionToDatabase = async (subscription, userId) => {
     }, { onConflict: 'endpoint' });
 
   if (error) {
-    console.error('❌ Error guardando suscripción en Supabase:', error);
+    console.error('❌ Error guardando suscripción en DB:', error);
   } else {
-    console.log('💾 Suscripción guardada en Supabase correctamente.');
+    console.log('💾 Suscripción guardada para Robot V7.');
   }
 };
 
 // --------------------------------------------------------------------
-// LISTENER: Para recibir mensajes cuando la app está abierta
+// 3. ESCUCHAR MENSAJES EN VIVO (BroadcastChannel)
 // --------------------------------------------------------------------
 export const onMessageListener = () => {
     return new Promise((resolve) => {
         const channel = new BroadcastChannel('push-messages');
         channel.addEventListener('message', (event) => {
-            console.log('📩 Mensaje recibido en primer plano:', event.data);
+            console.log('📩 Mensaje en vivo:', event.data);
             resolve({ notification: event.data });
         });
     });
 };
 
 // --------------------------------------------------------------------
-// [FIX] LOCAL NOTIFICATION: Función recuperada para compatibilidad
+// 4. NOTIFICACIÓN LOCAL (Para compatibilidad con NewsFeed/Vercel)
 // --------------------------------------------------------------------
 export const sendNotification = (title, body) => {
-  // Esta función crea una notificación LOCAL inmediata (sin ir al servidor)
-  // Útil para feedback instantáneo o pruebas en NewsFeed.jsx
   if (Notification.permission === 'granted') {
     try {
-      // Intentamos usar el Service Worker para mostrarla (es más estable en móviles)
       navigator.serviceWorker.ready.then(registration => {
         registration.showNotification(title, {
           body: body,
@@ -113,13 +113,8 @@ export const sendNotification = (title, body) => {
         });
       });
     } catch (e) {
-      // Fallback clásico
-      new Notification(title, { 
-        body, 
-        icon: '/icons/icon-192x192.png' 
-      });
+      // Fallback básico si falla el SW
+      new Notification(title, { body, icon: '/icons/icon-192x192.png' });
     }
-  } else {
-    console.log('⚠️ No hay permiso para enviar notificación local.');
   }
 };
