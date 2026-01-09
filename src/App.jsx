@@ -10,6 +10,10 @@ import ErrorBoundary from './components/ErrorBoundary'
 // 3. IMPORTAMOS EL GESTOR DE NOTIFICACIONES
 import { initNotifications } from './lib/notifications'
 
+// --- NUEVA IMPORTACIÓN PARA EL TEMA ---
+import useTheme from './hooks/useTheme'
+// --------------------------------------
+
 // 4. IMPORTAMOS LA PANTALLA DE CARGA
 import LoadLaws from './pages/LoadLaws'
 
@@ -107,6 +111,11 @@ function AppRoutes() {
 // APP PRINCIPAL
 // ============================================================
 function App() {
+  // --- ACTIVAMOS EL HOOK AQUÍ ---
+  // Esto asegura que el tema se aplique apenas carga la app
+  useTheme(); 
+  // ------------------------------
+
   return (
     <ErrorBoundary>
       <BrowserRouter>
